@@ -29,13 +29,6 @@ def main() -> int:
     print("Setting up builder.py project...")
     print(f"Project root: {project_root}")
 
-    # Install dependencies
-    if not run_command(
-        [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
-        "Installing dependencies"
-    ):
-        return 1
-
     # Make builder.py executable
     builder_script = project_root / "builder.py"
     if builder_script.exists():

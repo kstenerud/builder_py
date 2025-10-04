@@ -10,6 +10,7 @@ This script:
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,8 +18,7 @@ import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Dict, Any, Optional
-import yaml
+from typing import Optional
 
 
 class BuilderManager:
@@ -37,18 +37,32 @@ class BuilderManager:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.executables_dir.mkdir(parents=True, exist_ok=True)
 
-    def load_project_config(self) -> Dict[str, Any]:
-        """Load project configuration from builder.yaml."""
+    def load_project_config(self) -> str:
+        """Load builder_binary URL from builder.yaml."""
         if not self.config_file.exists():
             raise FileNotFoundError(f"Project configuration not found: {self.config_file}")
 
         with open(self.config_file, 'r') as f:
-            config = yaml.safe_load(f)
+            content = f.read()
 
-        if not config or 'builder_binary' not in config:
-            raise ValueError("Invalid configuration: 'builder_binary' key is required")
+        # Simple regex to find builder_binary field
+        # Matches: builder_binary: "url" or builder_binary: 'url' or builder_binary: url
+        # First try to match quoted values, then unquoted
+        quoted_pattern = r'^\s*builder_binary\s*:\s*["\']([^"\']+)["\']'
+        unquoted_pattern = r'^\s*builder_binary\s*:\s*([^\s#\n]+)'
 
-        return config
+        match = re.search(quoted_pattern, content, re.MULTILINE)
+        if not match:
+            match = re.search(unquoted_pattern, content, re.MULTILINE)
+
+        if not match:
+            raise ValueError("Invalid configuration: 'builder_binary' key not found or invalid format")
+
+        builder_url = match.group(1).strip()
+        if not builder_url:
+            raise ValueError("Invalid configuration: 'builder_binary' value is empty")
+
+        return builder_url
 
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable."""
@@ -119,8 +133,7 @@ class BuilderManager:
 
     def download_and_build_builder(self) -> None:
         """Download, build, and cache the builder executable."""
-        config = self.load_project_config()
-        builder_url = config['builder_binary']
+        builder_url = self.load_project_config()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

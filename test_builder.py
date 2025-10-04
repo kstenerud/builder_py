@@ -9,7 +9,6 @@ import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
-import yaml
 
 # Import the module we're testing
 from builder import BuilderManager
@@ -24,13 +23,11 @@ class TestBuilderManager(unittest.TestCase):
         self.temp_path = Path(self.temp_dir)
 
         # Mock the project root and config file
-        self.test_config = {
-            'builder_binary': 'https://example.com/test.zip'
-        }
+        self.test_config_url = 'https://example.com/test.zip'
 
         self.config_file = self.temp_path / "builder.yaml"
         with open(self.config_file, 'w') as f:
-            yaml.dump(self.test_config, f)
+            f.write(f'builder_binary: "{self.test_config_url}"\\n')
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""
@@ -70,9 +67,9 @@ class TestBuilderManager(unittest.TestCase):
         mock_cwd.return_value = self.temp_path
 
         manager = BuilderManager()
-        config = manager.load_project_config()
+        config_url = manager.load_project_config()
 
-        self.assertEqual(config, self.test_config)
+        self.assertEqual(config_url, self.test_config_url)
 
     @patch('builder.Path.cwd')
     def test_load_project_config_missing_file(self, mock_cwd: Mock) -> None:
@@ -92,7 +89,7 @@ class TestBuilderManager(unittest.TestCase):
 
         # Write invalid config
         with open(self.config_file, 'w') as f:
-            yaml.dump({'invalid_key': 'value'}, f)
+            f.write('invalid_key: value\n')
 
         manager = BuilderManager()
 
@@ -230,11 +227,9 @@ class TestBuilderManagerIntegration(unittest.TestCase):
 
         # Create config file
         self.config_file = self.temp_path / "builder.yaml"
-        config = {
-            'builder_binary': f"file://{self.zip_file}"
-        }
+        config_url = f"file://{self.zip_file}"
         with open(self.config_file, 'w') as f:
-            yaml.dump(config, f)
+            f.write(f'builder_binary: "{config_url}"\n')
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""

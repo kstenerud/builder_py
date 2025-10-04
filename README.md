@@ -11,10 +11,7 @@ A Python script that manages and forwards commands to builder executables. This 
 
 ## Quick Start
 
-1. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. **No dependencies needed** - Uses only Python standard library
 
 2. **Make the script executable**:
    ```bash
@@ -183,8 +180,9 @@ The test builder executable:
 ## Requirements
 
 - Python 3.7+
-- PyYAML 6.0+
 - Rust toolchain (cargo) for building downloaded projects
+
+**No external Python dependencies required** - uses only the Python standard library.
 
 ## License
 

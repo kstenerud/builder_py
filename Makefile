@@ -6,8 +6,8 @@ help: ## Show this help message
 	@echo "Available targets:"
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install: ## Install dependencies
-	pip install -r requirements.txt
+install: ## No dependencies to install (uses Python standard library only)
+	@echo "No dependencies needed - builder.py uses only Python standard library"
 
 test: ## Run unit tests
 	python -m unittest test_builder.py -v
