@@ -566,7 +566,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         self.assertTrue(str(path).endswith('builder'))
 
     def test_is_builder_cached(self) -> None:
-        """Test checking if builder is cached."""
+        """Test checking if builder is cached through CacheManager."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
@@ -576,7 +576,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
             exe_path.unlink()
 
         # Initially not cached
-        self.assertFalse(manager.is_builder_cached())
+        self.assertFalse(manager.cache_manager._is_builder_cached(manager.configuration.builder_url))
 
     @patch('builder.subprocess.run')
     def test_ensure_builder_available_with_trust_validation(self, mock_run: Mock) -> None:

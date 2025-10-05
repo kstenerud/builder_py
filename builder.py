@@ -764,9 +764,7 @@ class BuilderManager:
         """Get the path to the cached builder executable for the current project."""
         return self.path_builder.get_builder_executable_path_for_url(self.configuration.builder_url)
 
-    def is_builder_cached(self) -> bool:
-        """Check if builder executable is already cached."""
-        return self.cache_manager._is_builder_cached(self.configuration.builder_url)
+
 
 
 
@@ -796,7 +794,7 @@ class BuilderManager:
         # Validate that the URL is trusted
         self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
 
-        if not self.is_builder_cached():
+        if not self.cache_manager._is_builder_cached(self.configuration.builder_url):
             self.download_and_build_builder()
 
     def run_builder(self, args: list[str]) -> int:
