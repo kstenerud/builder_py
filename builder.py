@@ -61,9 +61,10 @@ class ProjectConfiguration:
 class PathBuilder:
     """Manages all path construction and location decisions for the builder system."""
 
-    def __init__(self, home_dir: Path):
-        """Initialize PathBuilder with the home directory as base."""
+    def __init__(self, home_dir: Path, project_root: Path):
+        """Initialize PathBuilder with the home directory and project root as base."""
         self.home_dir = home_dir
+        self.project_root = project_root
         self.cache_dir = home_dir / ".cache" / "builder"
         self.executables_dir = self.cache_dir / "executables"
         self.config_dir = home_dir / ".config" / "builder"
@@ -108,9 +109,9 @@ class PathBuilder:
         """Get the trusted URLs file path."""
         return self.config_dir / "trusted_urls"
 
-    def get_project_config_file(self, project_root: Path) -> Path:
+    def get_project_config_file(self) -> Path:
         """Get the project configuration file path."""
-        return project_root / "builder.yaml"
+        return self.project_root / "builder.yaml"
 
     def get_builder_cache_dir(self, url: str) -> Path:
         """Get the cache directory for a specific builder URL."""
@@ -709,10 +710,10 @@ class BuilderManager:
         # Setup directory structure and path management
         self.home_dir = Path.home()
         self.project_root = Path.cwd()
-        self.path_builder = PathBuilder(self.home_dir)
+        self.path_builder = PathBuilder(self.home_dir, self.project_root)
 
         # Initialize specialized components
-        config_file = self.path_builder.get_project_config_file(self.project_root)
+        config_file = self.path_builder.get_project_config_file()
         self.configuration = ProjectConfiguration(config_file)
         self.trust_manager = TrustManager(self.path_builder)
         self.cache_manager = CacheManager(self.path_builder)

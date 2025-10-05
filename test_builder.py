@@ -72,6 +72,8 @@ class TestPathBuilder(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
         self.home_dir = self.temp_path
+        self.project_root = self.temp_path / "project"
+        self.project_root.mkdir(exist_ok=True)
 
     def tearDown(self) -> None:
         """Clean up after tests."""
@@ -80,7 +82,7 @@ class TestPathBuilder(unittest.TestCase):
 
     def test_caret_encode_url(self) -> None:
         """Test URL encoding using caret encoding."""
-        path_builder = PathBuilder(self.home_dir)
+        path_builder = PathBuilder(self.home_dir, self.project_root)
 
         # Test safe characters are unchanged
         safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
@@ -102,7 +104,7 @@ class TestPathBuilder(unittest.TestCase):
 
     def test_get_builder_cache_dir(self) -> None:
         """Test getting cache directory for a URL."""
-        path_builder = PathBuilder(self.home_dir)
+        path_builder = PathBuilder(self.home_dir, self.project_root)
         url = "https://github.com/test/repo.git"
         cache_dir = path_builder.get_builder_cache_dir(url)
         expected_dir = path_builder.get_executables_dir() / path_builder._caret_encode_url(url)
@@ -110,7 +112,7 @@ class TestPathBuilder(unittest.TestCase):
 
     def test_get_builder_executable_path_for_url(self) -> None:
         """Test getting executable path for a URL."""
-        path_builder = PathBuilder(self.home_dir)
+        path_builder = PathBuilder(self.home_dir, self.project_root)
         url = "https://github.com/test/repo.git"
         exe_path = path_builder.get_builder_executable_path_for_url(url)
         expected_path = path_builder.get_builder_cache_dir(url) / "builder"
@@ -118,7 +120,7 @@ class TestPathBuilder(unittest.TestCase):
 
     def test_path_methods(self) -> None:
         """Test various path accessor methods."""
-        path_builder = PathBuilder(self.home_dir)
+        path_builder = PathBuilder(self.home_dir, self.project_root)
 
         # Test directory paths
         self.assertEqual(path_builder.get_cache_dir(), self.home_dir / ".cache" / "builder")
@@ -127,8 +129,7 @@ class TestPathBuilder(unittest.TestCase):
 
         # Test file paths
         self.assertEqual(path_builder.get_trusted_urls_file(), self.home_dir / ".config" / "builder" / "trusted_urls")
-        project_root = self.temp_path / "project"
-        self.assertEqual(path_builder.get_project_config_file(project_root), project_root / "builder.yaml")
+        self.assertEqual(path_builder.get_project_config_file(), self.project_root / "builder.yaml")
 
 
 class TestTrustManager(unittest.TestCase):
@@ -138,7 +139,9 @@ class TestTrustManager(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
-        self.path_builder = PathBuilder(self.temp_path)
+        self.project_root = self.temp_path / "project"
+        self.project_root.mkdir(exist_ok=True)
+        self.path_builder = PathBuilder(self.temp_path, self.project_root)
 
     def tearDown(self) -> None:
         """Clean up after tests."""
@@ -466,7 +469,9 @@ class TestCacheManager(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
-        self.path_builder = PathBuilder(self.temp_path)
+        self.project_root = self.temp_path / "project"
+        self.project_root.mkdir(exist_ok=True)
+        self.path_builder = PathBuilder(self.temp_path, self.project_root)
 
     def tearDown(self) -> None:
         """Clean up after tests."""
