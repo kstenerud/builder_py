@@ -713,6 +713,21 @@ class CommandProcessor:
         print("  ./builder.py --trust-list                   # List trusted URLs")
         return 0
 
+    def dispatch_command(self, command: str, args: list[str]) -> Optional[int]:
+        """Dispatch command to appropriate handler. Returns None if command not handled."""
+        command_handlers = {
+            "--trust-yes": self.handle_trust_yes_command,
+            "--trust-no": self.handle_trust_no_command,
+            "--trust-list": lambda args: self.handle_trust_list_command(),
+            "--cache-prune-older-than": self.handle_cache_prune_older_command,
+            "--cache-prune-builder": self.handle_cache_prune_builder_command,
+            "--cache-help": lambda args: self.handle_cache_help_command(),
+        }
+
+        if command in command_handlers:
+            return command_handlers[command](args)
+        return None
+
 
 class BuilderManager:
     """Orchestrates builder executable operations using specialized components."""
@@ -736,30 +751,6 @@ class BuilderManager:
     def load_project_config(self) -> str:
         """Get builder_binary URL from configuration."""
         return self.configuration.builder_url
-
-    def _handle_trust_yes_command(self, args: list[str]) -> int:
-        """Handle --trust-yes command."""
-        return self.command_processor.handle_trust_yes_command(args)
-
-    def _handle_trust_no_command(self, args: list[str]) -> int:
-        """Handle --trust-no command."""
-        return self.command_processor.handle_trust_no_command(args)
-
-    def _handle_trust_list_command(self) -> int:
-        """Handle --trust-list command."""
-        return self.command_processor.handle_trust_list_command()
-
-    def _handle_cache_prune_older_command(self, args: list[str]) -> int:
-        """Handle --cache-prune-older-than command."""
-        return self.command_processor.handle_cache_prune_older_command(args)
-
-    def _handle_cache_prune_builder_command(self, args: list[str]) -> int:
-        """Handle --cache-prune-builder command."""
-        return self.command_processor.handle_cache_prune_builder_command(args)
-
-    def _handle_cache_help_command(self) -> int:
-        """Handle --cache-help command."""
-        return self.command_processor.handle_cache_help_command()
 
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable for the current project."""
@@ -816,19 +807,10 @@ def main() -> int:
     command = sys.argv[1]
     manager = BuilderManager()
 
-    # Command dispatch table for better maintainability
-    command_handlers = {
-        "--trust-yes": manager._handle_trust_yes_command,
-        "--trust-no": manager._handle_trust_no_command,
-        "--trust-list": lambda args: manager._handle_trust_list_command(),
-        "--cache-prune-older-than": manager._handle_cache_prune_older_command,
-        "--cache-prune-builder": manager._handle_cache_prune_builder_command,
-        "--cache-help": lambda args: manager._handle_cache_help_command(),
-    }
-
-    # Handle special commands
-    if command in command_handlers:
-        return command_handlers[command](sys.argv)
+    # Try to handle special commands first
+    result = manager.command_processor.dispatch_command(command, sys.argv)
+    if result is not None:
+        return result
 
     # Default: pass arguments to builder executable
     try:
