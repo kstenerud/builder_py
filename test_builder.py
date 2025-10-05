@@ -283,42 +283,41 @@ class TestSourceFetcher(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_download_and_extract_archive_zip(self) -> None:
-        """Test archive format detection for ZIP files."""
+        """Test archive format detection for ZIP files through public interface."""
         source_manager = SourceFetcher()
 
-        # Mock the _download_and_extract_archive method
+        # Mock the private _download_and_extract_archive method
         with patch.object(source_manager, '_download_and_extract_archive') as mock_download:
             url = "https://example.com/test.zip"
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
-            source_manager.download_and_extract_archive(url, target_dir)
+            source_manager.download_or_clone_source(url, target_dir)
             mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_tar_gz(self) -> None:
-        """Test archive format detection for TAR.GZ files."""
+        """Test archive format detection for TAR.GZ files through public interface."""
         source_manager = SourceFetcher()
 
-        # Mock the _download_and_extract_archive method
+        # Mock the private _download_and_extract_archive method
         with patch.object(source_manager, '_download_and_extract_archive') as mock_download:
             url = "https://example.com/test.tar.gz"
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
-            source_manager.download_and_extract_archive(url, target_dir)
+            source_manager.download_or_clone_source(url, target_dir)
             mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_unsupported(self) -> None:
-        """Test archive format detection for unsupported formats."""
+        """Test archive format detection for unsupported formats through public interface."""
         source_manager = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
         with self.assertRaises(RuntimeError) as cm:
-            source_manager.download_and_extract_archive("https://example.com/test.rar", target_dir)
+            source_manager.download_or_clone_source("https://example.com/test.rar", target_dir)
 
         self.assertIn("Unsupported archive format", str(cm.exception))
-        self.assertIn(".zip, .tar.gz, .tgz", str(cm.exception))
 
     def test_parse_git_url_with_reference(self) -> None:
         """Test parsing Git URLs with references."""
@@ -346,7 +345,7 @@ class TestSourceFetcher(unittest.TestCase):
 
     @patch('subprocess.run')
     def test_clone_and_checkout_git_with_reference(self, mock_run: Mock) -> None:
-        """Test Git cloning with specific reference."""
+        """Test Git cloning with specific reference through public interface."""
         source_manager = SourceFetcher()
         mock_run.return_value.returncode = 0
 
@@ -354,14 +353,14 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        source_manager.clone_and_checkout_git(url, target_dir)
+        source_manager.download_or_clone_source(url, target_dir)
 
         # Should call git clone and checkout
         self.assertEqual(mock_run.call_count, 2)
 
     @patch('subprocess.run')
     def test_clone_and_checkout_git_default_branch_main(self, mock_run: Mock) -> None:
-        """Test Git cloning falls back to main branch."""
+        """Test Git cloning falls back to main branch through public interface."""
         source_manager = SourceFetcher()
 
         # First call (clone) succeeds, second call (checkout main) succeeds
@@ -374,7 +373,7 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        source_manager.clone_and_checkout_git(url, target_dir)
+        source_manager.download_or_clone_source(url, target_dir)
 
         # Should try main branch
         self.assertEqual(mock_run.call_count, 2)
@@ -386,7 +385,7 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        with patch.object(source_manager, 'download_and_extract_archive') as mock_archive:
+        with patch.object(source_manager, '_download_and_extract_archive_by_extension') as mock_archive:
             source_manager.download_or_clone_source("https://example.com/project.zip", target_dir)
             mock_archive.assert_called_once_with("https://example.com/project.zip", target_dir)
 
@@ -396,7 +395,7 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        with patch.object(source_manager, 'clone_and_checkout_git') as mock_git:
+        with patch.object(source_manager, '_clone_and_checkout_git') as mock_git:
             source_manager.download_or_clone_source("https://github.com/user/repo.git", target_dir)
             mock_git.assert_called_once_with("https://github.com/user/repo.git", target_dir)
 

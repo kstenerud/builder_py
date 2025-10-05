@@ -428,7 +428,7 @@ class SourceFetcher:
         # Copy the entire directory tree
         shutil.copytree(source_path, target_dir, dirs_exist_ok=True)
 
-    def clone_and_checkout_git(self, url: str, clone_dir: Path) -> None:
+    def _clone_and_checkout_git(self, url: str, clone_dir: Path) -> None:
         """Clone a Git repository and checkout the specified reference."""
         git_url, reference = self._parse_git_url(url)
 
@@ -479,7 +479,7 @@ class SourceFetcher:
         finally:
             os.chdir(original_cwd)
 
-    def download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
+    def _download_and_extract_archive_by_extension(self, url: str, extract_dir: Path) -> None:
         """Download and extract an archive file based on its extension."""
         if url.endswith(('.zip', '.tar.gz', '.tgz')):
             self._download_and_extract_archive(url, extract_dir)
@@ -514,10 +514,10 @@ class SourceFetcher:
         else:
             git_url, _ = self._parse_git_url(url)
             if git_url.endswith('.git'):
-                self.clone_and_checkout_git(url, target_dir)
+                self._clone_and_checkout_git(url, target_dir)
             else:
                 # It's a remote archive URL
-                self.download_and_extract_archive(url, target_dir)
+                self._download_and_extract_archive_by_extension(url, target_dir)
 
 
 class BuilderBuilder:
