@@ -25,35 +25,14 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 
-class BuilderManager:
-    """Manages builder executable operations with security and configuration."""
+class ConfigManager:
+    """Manages project configuration loading and parsing."""
 
-    # File and configuration constants
-    BUILDER_EXECUTABLE_NAME = "builder"
     CONFIG_FILE_NAME = "builder.yaml"
-    SUPPORTED_ARCHIVE_FORMATS = ".zip, .tar.gz, .tgz"
-    TRUSTED_URLS_FILE = "trusted_urls"
 
-    def __init__(self) -> None:
-        """Initialize the builder manager."""
-        self.home_dir = Path.home()
-        self.cache_dir = self.home_dir / ".cache" / "builder"
-        self.executables_dir = self.cache_dir / "executables"
-        self.config_dir = self.home_dir / ".config" / "builder"
-        self.trusted_urls_file = self.config_dir / self.TRUSTED_URLS_FILE
-        self.project_root = Path.cwd()
-        self.config_file = self.project_root / self.CONFIG_FILE_NAME
-
-        # Built-in trusted URLs (for testing and default behavior)
-        self.builtin_trusted_urls = [
-            "https://github.com/kstenerud/builder-test.git"
-        ]
-
-    def ensure_cache_directories(self) -> None:
-        """Create cache and config directories if they don't exist."""
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.executables_dir.mkdir(parents=True, exist_ok=True)
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.config_file = project_root / self.CONFIG_FILE_NAME
 
     def load_project_config(self) -> str:
         """Load builder_binary URL from builder.yaml."""
@@ -64,15 +43,6 @@ class BuilderManager:
             content = f.read()
 
         # Single regex to match builder_binary field with flexible quoting for both key and value
-        # Pattern breakdown:
-        # ^\s*                                    - Start of line with optional whitespace
-        # (?:["\']?builder_binary["\']?|builder_binary) - Key: quoted or unquoted "builder_binary"
-        # \s*:\s*                                 - Colon with optional whitespace
-        # (?:                                     - Non-capturing group for value alternatives:
-        #   ["\']([^"\']*)["\']                   -   Group 1: quoted value (single or double quotes)
-        #   |                                     -   OR
-        #   ([^\s#\n]+)                           -   Group 2: unquoted value (until whitespace/comment/newline)
-        # )
         pattern = r'^\s*(?:["\']builder_binary["\']|builder_binary)\s*:\s*(?:["\']([^"\']*)["\']|([^\s#\n]+))'
         match = re.search(pattern, content, re.MULTILINE)
 
@@ -86,364 +56,14 @@ class BuilderManager:
 
         return builder_url.strip()
 
-    def _get_supported_archive_formats(self) -> str:
-        """Get a formatted string of supported archive formats for error messages.
 
-        Returns:
-            Human-readable string listing all supported archive formats
-        """
-        return self.SUPPORTED_ARCHIVE_FORMATS
+class PathManager:
+    """Manages URL encoding and path construction for cache directories."""
 
-    def _print_error(self, message: str) -> None:
-        """Print error message to stderr with consistent formatting.
+    def __init__(self, executables_dir: Path):
+        self.executables_dir = executables_dir
 
-        Args:
-            message: Error message to display
-        """
-        print(f"Error: {message}", file=sys.stderr)
-
-    def _handle_trust_yes_command(self, args: list[str]) -> int:
-        """Handle --trust-yes command.
-
-        Args:
-            args: Command line arguments
-
-        Returns:
-            Exit code: 0 for success, 1 for error
-        """
-        if len(args) < 3:
-            self._print_error("--trust-yes requires a URL parameter")
-            return 1
-
-        url = args[2]
-        try:
-            if self.add_trusted_url(url):
-                print(f"Added trusted URL: {url}")
-            else:
-                print(f"URL already trusted: {url}")
-            return 0
-        except Exception as e:
-            self._print_error(f"adding trusted URL: {e}")
-            return 1
-
-    def _handle_trust_no_command(self, args: list[str]) -> int:
-        """Handle --trust-no command.
-
-        Args:
-            args: Command line arguments
-
-        Returns:
-            Exit code: 0 for success, 1 for error
-        """
-        if len(args) < 3:
-            self._print_error("--trust-no requires a URL parameter")
-            return 1
-
-        url = args[2]
-        try:
-            if self.remove_trusted_url(url):
-                print(f"Removed trusted URL: {url}")
-            else:
-                print(f"URL not found in trusted list or is built-in: {url}")
-            return 0
-        except Exception as e:
-            self._print_error(f"removing trusted URL: {e}")
-            return 1
-
-    def _handle_trust_list_command(self) -> int:
-        """Handle --trust-list command.
-
-        Returns:
-            Exit code: 0 for success, 1 for error
-        """
-        try:
-            trusted_urls = self.load_trusted_urls()
-            print("Trusted URLs:")
-            for url in sorted(trusted_urls):
-                marker = " (built-in)" if url in self.builtin_trusted_urls else ""
-                print(f"  {url}{marker}")
-            return 0
-        except Exception as e:
-            self._print_error(f"listing trusted URLs: {e}")
-            return 1
-
-    def _handle_cache_prune_older_command(self, args: list[str]) -> int:
-        """Handle --cache-prune-older-than command.
-
-        Args:
-            args: Command line arguments
-
-        Returns:
-            Exit code: 0 for success, 1 for error
-        """
-        if len(args) < 3:
-            self._print_error("--cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)")
-            return 1
-
-        time_spec = args[2]
-        try:
-            max_age = self._parse_time_spec(time_spec)
-            removed = self.prune_cache(max_age)
-            return 0
-        except ValueError as e:
-            self._print_error(str(e))
-            return 1
-        except Exception as e:
-            self._print_error(f"during cache pruning: {e}")
-            return 1
-
-    def _handle_cache_prune_builder_command(self, args: list[str]) -> int:
-        """Handle --cache-prune-builder command.
-
-        Args:
-            args: Command line arguments
-
-        Returns:
-            Exit code: 0 for success, 1 for error
-        """
-        url = args[2] if len(args) >= 3 else None
-        try:
-            removed = self.prune_builder_cache(url)
-            return 0
-        except Exception as e:
-            self._print_error(f"during builder cache pruning: {e}")
-            return 1
-
-    def _handle_cache_help_command(self) -> int:
-        """Handle --cache-help command.
-
-        Returns:
-            Exit code: 0 for success
-        """
-        print("Cache Management:")
-        print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
-        print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
-        print("                                   (uses project's builder_binary if no URL specified)")
-        print("")
-        print("Trust Management:")
-        print("  --trust-yes <url>                Add URL to trusted list")
-        print("  --trust-no <url>                 Remove URL from trusted list")
-        print("  --trust-list                     List all trusted URLs")
-        print("")
-        print("Time format: <positive_integer><unit>")
-        print("  s = seconds, m = minutes, h = hours, d = days")
-        print("")
-        print("Examples:")
-        print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
-        print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
-        print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
-        print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
-        print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
-        print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
-        print("  ./builder.py --trust-no https://example.com/repo.git   # Remove trusted URL")
-        print("  ./builder.py --trust-list                   # List trusted URLs")
-        return 0
-
-    def _extract_archive(self, archive_path: Path, extract_dir: Path) -> None:
-        """Extract an archive file to the specified directory.
-
-        Args:
-            archive_path: Path to the archive file
-            extract_dir: Directory to extract to
-
-        Raises:
-            RuntimeError: If archive format is unsupported
-        """
-        archive_str = str(archive_path)
-
-        if archive_str.endswith('.zip'):
-            with zipfile.ZipFile(archive_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-        elif archive_str.endswith('.tar.gz') or archive_str.endswith('.tgz'):
-            with tarfile.open(archive_path, 'r:gz') as tar_ref:
-                tar_ref.extractall(extract_dir)
-        else:
-            raise RuntimeError(f"Unsupported archive format: {archive_path}. Supported formats: {self._get_supported_archive_formats()}")
-
-    def _extract_domain(self, url: str) -> str:
-        """Extract domain from URL for trust validation.
-
-        Args:
-            url: URL to extract domain from
-
-        Returns:
-            Domain portion of the URL
-        """
-        parsed = urlparse(url)
-        return parsed.netloc.lower()
-
-    def load_trusted_urls(self) -> list[str]:
-        """Load trusted URLs from configuration file.
-
-        Returns:
-            List of trusted URLs (includes both file-based and built-in URLs)
-        """
-        trusted_urls = self.builtin_trusted_urls.copy()
-
-        if self.trusted_urls_file.exists():
-            try:
-                with open(self.trusted_urls_file, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            trusted_urls.append(line)
-            except Exception as e:
-                print(f"Warning: Error reading trusted URLs file: {e}", file=sys.stderr)
-
-        return trusted_urls
-
-    def save_trusted_urls(self, urls: list[str]) -> None:
-        """Save trusted URLs to configuration file.
-
-        Args:
-            urls: List of URLs to save (excluding built-in URLs)
-        """
-        self.ensure_cache_directories()
-
-        with open(self.trusted_urls_file, 'w') as f:
-            f.write("# Trusted URLs for builder script\n")
-            f.write("# One URL per line\n")
-            for url in urls:
-                if url not in self.builtin_trusted_urls:
-                    f.write(f"{url}\n")
-
-    def add_trusted_url(self, url: str) -> bool:
-        """Add a URL to the trusted list.
-
-        Args:
-            url: URL to add to trusted list
-
-        Returns:
-            True if URL was added, False if it was already trusted
-        """
-        trusted_urls = self.load_trusted_urls()
-
-        if url in trusted_urls:
-            return False
-
-        # Only save user-added URLs (not built-in ones)
-        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls]
-        user_urls.append(url)
-        self.save_trusted_urls(user_urls)
-        return True
-
-    def remove_trusted_url(self, url: str) -> bool:
-        """Remove a URL from the trusted list.
-
-        Args:
-            url: URL to remove from trusted list
-
-        Returns:
-            True if URL was removed, False if it wasn't in the list or is built-in
-        """
-        if url in self.builtin_trusted_urls:
-            print(f"Cannot remove built-in trusted URL: {url}", file=sys.stderr)
-            return False
-
-        trusted_urls = self.load_trusted_urls()
-
-        if url not in trusted_urls:
-            return False
-
-        # Only save user-added URLs (not built-in ones)
-        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls and u != url]
-        self.save_trusted_urls(user_urls)
-        return True
-
-    def is_url_trusted(self, url: str) -> bool:
-        """Check if a URL is trusted based on domain matching.
-
-        Args:
-            url: URL to check
-
-        Returns:
-            True if URL domain matches a trusted domain
-        """
-        url_domain = self._extract_domain(url)
-        trusted_urls = self.load_trusted_urls()
-
-        for trusted_url in trusted_urls:
-            trusted_domain = self._extract_domain(trusted_url)
-            if url_domain == trusted_domain:
-                return True
-
-        return False
-
-    def validate_builder_url_trust(self, url: str) -> None:
-        """Validate that a builder URL is trusted.
-
-        Args:
-            url: URL to validate
-
-        Raises:
-            ValueError: If URL is not trusted
-        """
-        if not self.is_url_trusted(url):
-            url_domain = self._extract_domain(url)
-            trusted_urls = self.load_trusted_urls()
-            trusted_domains = [self._extract_domain(u) for u in trusted_urls]
-
-            print(f"Error: Untrusted URL domain '{url_domain}'", file=sys.stderr)
-            print(f"URL: {url}", file=sys.stderr)
-            print(f"Trusted domains: {', '.join(sorted(set(trusted_domains)))}", file=sys.stderr)
-            print(f"Use --trust-yes {url} to add this URL to the trusted list", file=sys.stderr)
-            raise ValueError(f"Untrusted URL domain: {url_domain}")
-
-    def _parse_time_spec(self, time_spec: str) -> timedelta:
-        """Parse a time specification like '5m', '400d', '2h' into a timedelta.
-
-        Args:
-            time_spec: Time specification with format: positive_integer + unit
-                      where unit is one of: s (seconds), m (minutes), h (hours), d (days)
-
-        Returns:
-            timedelta object representing the time duration
-
-        Raises:
-            ValueError: If the time specification is invalid
-        """
-        if not time_spec:
-            raise ValueError("Time specification cannot be empty")
-
-        # Match pattern: positive integer followed by unit (s, m, h, d)
-        match = re.match(r'^(\d+)([smhd])$', time_spec.lower())
-        if not match:
-            raise ValueError(f"Invalid time specification: '{time_spec}'. Expected format: <positive_integer><unit> where unit is s, m, h, or d")
-
-        amount = int(match.group(1))
-        unit = match.group(2)
-
-        if amount <= 0:
-            raise ValueError(f"Time amount must be positive, got: {amount}")
-
-        # Convert to timedelta based on unit
-        if unit == 's':
-            return timedelta(seconds=amount)
-        elif unit == 'm':
-            return timedelta(minutes=amount)
-        elif unit == 'h':
-            return timedelta(hours=amount)
-        elif unit == 'd':
-            return timedelta(days=amount)
-        else:
-            # This should never happen due to regex, but just in case
-            raise ValueError(f"Unsupported time unit: {unit}")
-
-    def _parse_git_url(self, url: str) -> Tuple[str, Optional[str]]:
-        """Parse a Git URL and extract the base URL and optional reference.
-
-        Args:
-            url: Git URL potentially ending with .git#<reference>
-
-        Returns:
-            Tuple of (base_git_url, reference_or_none)
-        """
-        if '#' in url:
-            git_url, reference = url.split('#', 1)
-            return git_url, reference
-        return url, None
-
-    def _caret_encode_url(self, url: str) -> str:
+    def caret_encode_url(self, url: str) -> str:
         """Encode a URL using caret-encoding for safe use as a directory name."""
         result = []
 
@@ -451,7 +71,6 @@ class BuilderManager:
             code = ord(char)
 
             # Safe characters that don't need encoding
-            # Including '.' and '~' since their edge cases don't apply to URL encoding
             if (char.isalnum() or char in '-_`{}.~'):
                 result.append(char)
             else:
@@ -468,41 +87,147 @@ class BuilderManager:
 
         return ''.join(result)
 
-    def _get_builder_cache_dir(self, url: str) -> Path:
-        """Get the cache directory for a specific builder URL.
-
-        Encapsulates the URL encoding and directory structure logic.
-
-        Args:
-            url: The builder URL
-
-        Returns:
-            Path to the cache directory for this URL
-        """
-        encoded_url = self._caret_encode_url(url)
+    def get_builder_cache_dir(self, url: str) -> Path:
+        """Get the cache directory for a specific builder URL."""
+        encoded_url = self.caret_encode_url(url)
         return self.executables_dir / encoded_url
 
-    def _get_builder_executable_path_for_url(self, url: str) -> Path:
-        """Get the executable path for a specific builder URL.
+    def get_builder_executable_path_for_url(self, url: str) -> Path:
+        """Get the executable path for a specific builder URL."""
+        cache_dir = self.get_builder_cache_dir(url)
+        return cache_dir / "builder"
 
-        Args:
-            url: The builder URL
 
-        Returns:
-            Path to the cached executable for this URL
-        """
-        cache_dir = self._get_builder_cache_dir(url)
-        return cache_dir / self.BUILDER_EXECUTABLE_NAME
+class TrustManager:
+    """Manages trusted URLs for security validation."""
+
+    TRUSTED_URLS_FILE = "trusted_urls"
+
+    def __init__(self, config_dir: Path):
+        self.config_dir = config_dir
+        self.trusted_urls_file = config_dir / self.TRUSTED_URLS_FILE
+        self.builtin_trusted_urls = [
+            "https://github.com/kstenerud/builder-test.git"
+        ]
+
+    def _extract_domain(self, url: str) -> str:
+        """Extract domain from URL for trust validation."""
+        parsed = urlparse(url)
+        return parsed.netloc.lower()
+
+    def load_trusted_urls(self) -> list[str]:
+        """Load trusted URLs from configuration file."""
+        trusted_urls = self.builtin_trusted_urls.copy()
+
+        if self.trusted_urls_file.exists():
+            try:
+                with open(self.trusted_urls_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            trusted_urls.append(line)
+            except Exception as e:
+                print(f"Warning: Error reading trusted URLs file: {e}", file=sys.stderr)
+
+        return trusted_urls
+
+    def save_trusted_urls(self, urls: list[str]) -> None:
+        """Save trusted URLs to configuration file."""
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(self.trusted_urls_file, 'w') as f:
+            f.write("# Trusted URLs for builder script\n")
+            f.write("# One URL per line\n")
+            for url in urls:
+                if url not in self.builtin_trusted_urls:
+                    f.write(f"{url}\n")
+
+    def add_trusted_url(self, url: str) -> bool:
+        """Add a URL to the trusted list."""
+        trusted_urls = self.load_trusted_urls()
+
+        if url in trusted_urls:
+            return False
+
+        # Only save user-added URLs (not built-in ones)
+        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls]
+        user_urls.append(url)
+        self.save_trusted_urls(user_urls)
+        return True
+
+    def remove_trusted_url(self, url: str) -> bool:
+        """Remove a URL from the trusted list."""
+        if url in self.builtin_trusted_urls:
+            print(f"Cannot remove built-in trusted URL: {url}", file=sys.stderr)
+            return False
+
+        trusted_urls = self.load_trusted_urls()
+
+        if url not in trusted_urls:
+            return False
+
+        # Only save user-added URLs (not built-in ones)
+        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls and u != url]
+        self.save_trusted_urls(user_urls)
+        return True
+
+    def is_url_trusted(self, url: str) -> bool:
+        """Check if a URL is trusted based on domain matching."""
+        url_domain = self._extract_domain(url)
+        trusted_urls = self.load_trusted_urls()
+
+        for trusted_url in trusted_urls:
+            trusted_domain = self._extract_domain(trusted_url)
+            if url_domain == trusted_domain:
+                return True
+
+        return False
+
+    def validate_builder_url_trust(self, url: str) -> None:
+        """Validate that a builder URL is trusted."""
+        if not self.is_url_trusted(url):
+            url_domain = self._extract_domain(url)
+            trusted_urls = self.load_trusted_urls()
+            trusted_domains = [self._extract_domain(u) for u in trusted_urls]
+
+            print(f"Error: Untrusted URL domain '{url_domain}'", file=sys.stderr)
+            print(f"URL: {url}", file=sys.stderr)
+            print(f"Trusted domains: {', '.join(sorted(set(trusted_domains)))}", file=sys.stderr)
+            print(f"Use --trust-yes {url} to add this URL to the trusted list", file=sys.stderr)
+            raise ValueError(f"Untrusted URL domain: {url_domain}")
+
+
+class CacheManager:
+    """Manages cache operations and directory management."""
+
+    def __init__(self, cache_dir: Path, executables_dir: Path, path_manager: PathManager):
+        self.cache_dir = cache_dir
+        self.executables_dir = executables_dir
+        self.path_manager = path_manager
+
+    def ensure_cache_directories(self) -> None:
+        """Create cache and config directories if they don't exist."""
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.executables_dir.mkdir(parents=True, exist_ok=True)
+
+    def is_builder_cached(self, url: str) -> bool:
+        """Check if builder executable is already cached."""
+        builder_path = self.path_manager.get_builder_executable_path_for_url(url)
+        return builder_path.exists() and builder_path.is_file()
+
+    def cache_builder_executable(self, source_path: Path, url: str) -> None:
+        """Copy the builder executable to the cache."""
+        target_path = self.path_manager.get_builder_executable_path_for_url(url)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"Caching builder executable to: {target_path}")
+        shutil.copy2(source_path, target_path)
+
+        # Make sure it's executable
+        target_path.chmod(0o755)
 
     def _get_file_age(self, file_path: Path) -> datetime:
-        """Get the age of a file, trying access time, then modified time, then created time.
-
-        Args:
-            file_path: Path to the file to check
-
-        Returns:
-            datetime object representing the file's timestamp
-        """
+        """Get the age of a file, trying access time, then modified time, then created time."""
         stat = file_path.stat()
 
         # Try access time first (st_atime)
@@ -520,27 +245,116 @@ class BuilderManager:
         # If all else fails, use current time (shouldn't happen)
         return datetime.now()
 
-    def get_builder_executable_path(self) -> Path:
-        """Get the path to the cached builder executable for the current project.
+    def prune_cache(self, max_age: timedelta) -> int:
+        """Remove cached builders older than the specified age."""
+        if not self.executables_dir.exists():
+            return 0
 
-        Returns:
-            Path to the cached executable for the current project's builder URL
-        """
-        builder_url = self.load_project_config()
-        return self._get_builder_executable_path_for_url(builder_url)
+        removed_count = 0
+        cutoff_time = datetime.now() - max_age
 
-    def is_builder_cached(self) -> bool:
-        """Check if builder executable is already cached."""
-        builder_path = self.get_builder_executable_path()
-        return builder_path.exists() and builder_path.is_file()
+        print(f"Pruning cache entries older than {max_age}...")
+
+        # Iterate through all cache directories
+        for cache_dir in self.executables_dir.iterdir():
+            if not cache_dir.is_dir():
+                continue
+
+            builder_path = cache_dir / "builder"
+            if not builder_path.exists():
+                continue
+
+            try:
+                file_age = self._get_file_age(builder_path)
+
+                if file_age < cutoff_time:
+                    print(f"Removing old cache entry: {cache_dir.name}")
+                    shutil.rmtree(cache_dir)
+                    removed_count += 1
+                else:
+                    # Calculate human-readable age
+                    age_delta = datetime.now() - file_age
+                    if age_delta.days > 0:
+                        age_str = f"{age_delta.days}d"
+                    elif age_delta.seconds > 3600:
+                        age_str = f"{age_delta.seconds // 3600}h"
+                    elif age_delta.seconds > 60:
+                        age_str = f"{age_delta.seconds // 60}m"
+                    else:
+                        age_str = f"{age_delta.seconds}s"
+                    print(f"Keeping cache entry (age: {age_str}): {cache_dir.name}")
+
+            except Exception as e:
+                print(f"Warning: Could not check age of {cache_dir.name}: {e}")
+                continue
+
+        if removed_count > 0:
+            print(f"Removed {removed_count} cache entries")
+        else:
+            print("No cache entries needed pruning")
+
+        return removed_count
+
+    def prune_builder_cache(self, url: str) -> int:
+        """Remove cached builder for a specific URL."""
+        if not self.executables_dir.exists():
+            return 0
+
+        print(f"Removing cache for URL: {url}")
+
+        # Get paths using path manager
+        cache_dir = self.path_manager.get_builder_cache_dir(url)
+        builder_path = self.path_manager.get_builder_executable_path_for_url(url)
+
+        if not cache_dir.exists():
+            print(f"No cache entry found for: {url}")
+            return 0
+
+        if not cache_dir.is_dir():
+            print(f"Cache entry is not a directory: {cache_dir}")
+            return 0
+
+        if not builder_path.exists():
+            print(f"No builder executable found in cache entry: {cache_dir}")
+            return 0
+
+        try:
+            print(f"Removing cache entry: {cache_dir.name}")
+            shutil.rmtree(cache_dir)
+            print(f"Successfully removed cache for: {url}")
+            return 1
+        except Exception as e:
+            print(f"Error removing cache entry: {e}", file=sys.stderr)
+            return 0
+
+
+class SourceManager:
+    """Manages archive/Git download and extraction operations."""
+
+    SUPPORTED_ARCHIVE_FORMATS = ".zip, .tar.gz, .tgz"
+
+    def _extract_archive(self, archive_path: Path, extract_dir: Path) -> None:
+        """Extract an archive file to the specified directory."""
+        archive_str = str(archive_path)
+
+        if archive_str.endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+        elif archive_str.endswith('.tar.gz') or archive_str.endswith('.tgz'):
+            with tarfile.open(archive_path, 'r:gz') as tar_ref:
+                tar_ref.extractall(extract_dir)
+        else:
+            raise RuntimeError(f"Unsupported archive format: {archive_path}. Supported formats: {self.SUPPORTED_ARCHIVE_FORMATS}")
+
+    def _parse_git_url(self, url: str) -> Tuple[str, Optional[str]]:
+        """Parse a Git URL and extract the base URL and optional reference."""
+        if '#' in url:
+            git_url, reference = url.split('#', 1)
+            return git_url, reference
+        return url, None
 
     def _download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
-        """Download an archive file and extract it to the specified directory.
-
-        Args:
-            url: URL to download archive from
-            extract_dir: Directory to extract archive to
-        """
+        """Download an archive file and extract it to the specified directory."""
         print(f"Downloading builder from: {url}")
 
         # Determine appropriate suffix for temporary file
@@ -560,19 +374,8 @@ class BuilderManager:
             finally:
                 os.unlink(temp_file.name)
 
-
-
     def copy_and_extract_file_archive(self, file_path: str, extract_dir: Path) -> None:
-        """Copy and extract a local archive file.
-
-        Args:
-            file_path: Path to the local archive file
-            extract_dir: Directory to extract archive to
-
-        Raises:
-            FileNotFoundError: If archive file doesn't exist
-            ValueError: If path is not a file
-        """
+        """Copy and extract a local archive file."""
         source_path = Path(file_path)
 
         if not source_path.exists():
@@ -651,19 +454,26 @@ class BuilderManager:
             os.chdir(original_cwd)
 
     def download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
-        """Download and extract an archive file based on its extension.
-
-        Args:
-            url: URL to download archive from
-            extract_dir: Directory to extract archive to
-
-        Raises:
-            RuntimeError: If archive format is unsupported
-        """
+        """Download and extract an archive file based on its extension."""
         if url.endswith(('.zip', '.tar.gz', '.tgz')):
             self._download_and_extract_archive(url, extract_dir)
         else:
-            raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: {self._get_supported_archive_formats()}")
+            raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: {self.SUPPORTED_ARCHIVE_FORMATS}")
+
+    def _handle_file_url(self, file_path: str, target_dir: Path) -> None:
+        """Handle file-based URLs (local files or directories)."""
+        source_path = Path(file_path)
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"File or directory not found: {file_path}")
+
+        # Check if it's an archive file
+        if source_path.is_file() and (file_path.endswith('.zip') or file_path.endswith('.tar.gz') or file_path.endswith('.tgz')):
+            self.copy_and_extract_file_archive(file_path, target_dir)
+        elif source_path.is_dir():
+            self.copy_file_directory(file_path, target_dir)
+        else:
+            raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive ({self.SUPPORTED_ARCHIVE_FORMATS})")
 
     def download_or_clone_source(self, url: str, target_dir: Path) -> None:
         """Download archive, clone Git repository, or copy local files based on URL format."""
@@ -683,20 +493,9 @@ class BuilderManager:
                 # It's a remote archive URL
                 self.download_and_extract_archive(url, target_dir)
 
-    def _handle_file_url(self, file_path: str, target_dir: Path) -> None:
-        """Handle file-based URLs (local files or directories)."""
-        source_path = Path(file_path)
 
-        if not source_path.exists():
-            raise FileNotFoundError(f"File or directory not found: {file_path}")
-
-        # Check if it's an archive file
-        if source_path.is_file() and (file_path.endswith('.zip') or file_path.endswith('.tar.gz') or file_path.endswith('.tgz')):
-            self.copy_and_extract_file_archive(file_path, target_dir)
-        elif source_path.is_dir():
-            self.copy_file_directory(file_path, target_dir)
-        else:
-            raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive ({self._get_supported_archive_formats()})")
+class BuildManager:
+    """Manages Rust project building operations."""
 
     def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
@@ -729,20 +528,227 @@ class BuilderManager:
 
         return builder_executable
 
-    def cache_builder_executable(self, source_path: Path) -> None:
-        """Copy the builder executable to the cache.
 
-        Args:
-            source_path: Path to the source executable to cache
-        """
-        target_path = self.get_builder_executable_path()
-        target_path.parent.mkdir(parents=True, exist_ok=True)
+class CommandProcessor:
+    """Processes CLI commands and provides help functionality."""
 
-        print(f"Caching builder executable to: {target_path}")
-        shutil.copy2(source_path, target_path)
+    def __init__(self, trust_manager: TrustManager, cache_manager: CacheManager, config_manager: ConfigManager):
+        self.trust_manager = trust_manager
+        self.cache_manager = cache_manager
+        self.config_manager = config_manager
 
-        # Make sure it's executable
-        target_path.chmod(0o755)
+    def _print_error(self, message: str) -> None:
+        """Print error message to stderr with consistent formatting."""
+        print(f"Error: {message}", file=sys.stderr)
+
+    def _parse_time_spec(self, time_spec: str) -> timedelta:
+        """Parse a time specification like '5m', '400d', '2h' into a timedelta."""
+        if not time_spec:
+            raise ValueError("Time specification cannot be empty")
+
+        # Match pattern: positive integer followed by unit (s, m, h, d)
+        match = re.match(r'^(\d+)([smhd])$', time_spec.lower())
+        if not match:
+            raise ValueError(f"Invalid time specification: '{time_spec}'. Expected format: <positive_integer><unit> where unit is s, m, h, or d")
+
+        amount = int(match.group(1))
+        unit = match.group(2)
+
+        if amount <= 0:
+            raise ValueError(f"Time amount must be positive, got: {amount}")
+
+        # Convert to timedelta based on unit
+        if unit == 's':
+            return timedelta(seconds=amount)
+        elif unit == 'm':
+            return timedelta(minutes=amount)
+        elif unit == 'h':
+            return timedelta(hours=amount)
+        elif unit == 'd':
+            return timedelta(days=amount)
+        else:
+            # This should never happen due to regex, but just in case
+            raise ValueError(f"Unsupported time unit: {unit}")
+
+    def handle_trust_yes_command(self, args: list[str]) -> int:
+        """Handle --trust-yes command."""
+        if len(args) < 3:
+            self._print_error("--trust-yes requires a URL parameter")
+            return 1
+
+        url = args[2]
+        try:
+            if self.trust_manager.add_trusted_url(url):
+                print(f"Added trusted URL: {url}")
+            else:
+                print(f"URL already trusted: {url}")
+            return 0
+        except Exception as e:
+            self._print_error(f"adding trusted URL: {e}")
+            return 1
+
+    def handle_trust_no_command(self, args: list[str]) -> int:
+        """Handle --trust-no command."""
+        if len(args) < 3:
+            self._print_error("--trust-no requires a URL parameter")
+            return 1
+
+        url = args[2]
+        try:
+            if self.trust_manager.remove_trusted_url(url):
+                print(f"Removed trusted URL: {url}")
+            else:
+                print(f"URL not found in trusted list or is built-in: {url}")
+            return 0
+        except Exception as e:
+            self._print_error(f"removing trusted URL: {e}")
+            return 1
+
+    def handle_trust_list_command(self) -> int:
+        """Handle --trust-list command."""
+        try:
+            trusted_urls = self.trust_manager.load_trusted_urls()
+            print("Trusted URLs:")
+            for url in sorted(trusted_urls):
+                marker = " (built-in)" if url in self.trust_manager.builtin_trusted_urls else ""
+                print(f"  {url}{marker}")
+            return 0
+        except Exception as e:
+            self._print_error(f"listing trusted URLs: {e}")
+            return 1
+
+    def handle_cache_prune_older_command(self, args: list[str]) -> int:
+        """Handle --cache-prune-older-than command."""
+        if len(args) < 3:
+            self._print_error("--cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)")
+            return 1
+
+        time_spec = args[2]
+        try:
+            max_age = self._parse_time_spec(time_spec)
+            removed = self.cache_manager.prune_cache(max_age)
+            return 0
+        except ValueError as e:
+            self._print_error(str(e))
+            return 1
+        except Exception as e:
+            self._print_error(f"during cache pruning: {e}")
+            return 1
+
+    def handle_cache_prune_builder_command(self, args: list[str]) -> int:
+        """Handle --cache-prune-builder command."""
+        url = args[2] if len(args) >= 3 else None
+        try:
+            if url is None:
+                try:
+                    url = self.config_manager.load_project_config()
+                    print(f"Removing cache for project's builder_binary: {url}")
+                except Exception as e:
+                    print(f"Error loading project configuration: {e}", file=sys.stderr)
+                    return 0
+            else:
+                print(f"Removing cache for specified URL: {url}")
+
+            removed = self.cache_manager.prune_builder_cache(url)
+            return 0
+        except Exception as e:
+            self._print_error(f"during builder cache pruning: {e}")
+            return 1
+
+    def handle_cache_help_command(self) -> int:
+        """Handle --cache-help command."""
+        print("Cache Management:")
+        print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
+        print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
+        print("                                   (uses project's builder_binary if no URL specified)")
+        print("")
+        print("Trust Management:")
+        print("  --trust-yes <url>                Add URL to trusted list")
+        print("  --trust-no <url>                 Remove URL from trusted list")
+        print("  --trust-list                     List all trusted URLs")
+        print("")
+        print("Time format: <positive_integer><unit>")
+        print("  s = seconds, m = minutes, h = hours, d = days")
+        print("")
+        print("Examples:")
+        print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
+        print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
+        print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
+        print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
+        print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
+        print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
+        print("  ./builder.py --trust-no https://example.com/repo.git   # Remove trusted URL")
+        print("  ./builder.py --trust-list                   # List trusted URLs")
+        return 0
+
+
+class BuilderManager:
+    """Orchestrates builder executable operations using specialized components."""
+
+    def __init__(self) -> None:
+        """Initialize the builder manager with specialized components."""
+        # Setup directory structure
+        self.home_dir = Path.home()
+        self.cache_dir = self.home_dir / ".cache" / "builder"
+        self.executables_dir = self.cache_dir / "executables"
+        self.config_dir = self.home_dir / ".config" / "builder"
+        self.project_root = Path.cwd()
+
+        # Initialize specialized components
+        self.config_manager = ConfigManager(self.project_root)
+        self.path_manager = PathManager(self.executables_dir)
+        self.trust_manager = TrustManager(self.config_dir)
+        self.cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
+        self.source_manager = SourceManager()
+        self.build_manager = BuildManager()
+        self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.config_manager)
+
+    def ensure_cache_directories(self) -> None:
+        """Create cache and config directories if they don't exist."""
+        self.cache_manager.ensure_cache_directories()
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+
+    def load_project_config(self) -> str:
+        """Load builder_binary URL from builder.yaml."""
+        return self.config_manager.load_project_config()
+
+    def _handle_trust_yes_command(self, args: list[str]) -> int:
+        """Handle --trust-yes command."""
+        return self.command_processor.handle_trust_yes_command(args)
+
+    def _handle_trust_no_command(self, args: list[str]) -> int:
+        """Handle --trust-no command."""
+        return self.command_processor.handle_trust_no_command(args)
+
+    def _handle_trust_list_command(self) -> int:
+        """Handle --trust-list command."""
+        return self.command_processor.handle_trust_list_command()
+
+    def _handle_cache_prune_older_command(self, args: list[str]) -> int:
+        """Handle --cache-prune-older-than command."""
+        return self.command_processor.handle_cache_prune_older_command(args)
+
+    def _handle_cache_prune_builder_command(self, args: list[str]) -> int:
+        """Handle --cache-prune-builder command."""
+        return self.command_processor.handle_cache_prune_builder_command(args)
+
+    def _handle_cache_help_command(self) -> int:
+        """Handle --cache-help command."""
+        return self.command_processor.handle_cache_help_command()
+
+
+
+    def get_builder_executable_path(self) -> Path:
+        """Get the path to the cached builder executable for the current project."""
+        builder_url = self.load_project_config()
+        return self.path_manager.get_builder_executable_path_for_url(builder_url)
+
+    def is_builder_cached(self) -> bool:
+        """Check if builder executable is already cached."""
+        builder_url = self.load_project_config()
+        return self.cache_manager.is_builder_cached(builder_url)
+
+
 
     def download_and_build_builder(self) -> None:
         """Download, build, and cache the builder executable."""
@@ -752,123 +758,20 @@ class BuilderManager:
             temp_path = Path(temp_dir)
 
             # Download archive or clone Git repository
-            self.download_or_clone_source(builder_url, temp_path)
+            self.source_manager.download_or_clone_source(builder_url, temp_path)
 
             # Find the Rust project root
-            rust_project_root = self.find_rust_project_root(temp_path)
+            rust_project_root = self.build_manager.find_rust_project_root(temp_path)
             if not rust_project_root:
                 raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
 
             # Build the Rust project
-            builder_executable = self.build_rust_project(rust_project_root)
+            builder_executable = self.build_manager.build_rust_project(rust_project_root)
 
             # Cache the executable
-            self.cache_builder_executable(builder_executable)
+            self.cache_manager.cache_builder_executable(builder_executable, builder_url)
 
-    def prune_cache(self, max_age: timedelta) -> int:
-        """Remove cached builders older than the specified age.
 
-        Args:
-            max_age: Maximum age for cached files (older files will be deleted)
-
-        Returns:
-            Number of cache entries removed
-        """
-        if not self.executables_dir.exists():
-            return 0
-
-        removed_count = 0
-        cutoff_time = datetime.now() - max_age
-
-        print(f"Pruning cache entries older than {max_age}...")
-
-        # Iterate through all cache directories
-        for cache_dir in self.executables_dir.iterdir():
-            if not cache_dir.is_dir():
-                continue
-
-            builder_path = cache_dir / "builder"
-            if not builder_path.exists():
-                continue
-
-            try:
-                file_age = self._get_file_age(builder_path)
-
-                if file_age < cutoff_time:
-                    print(f"Removing old cache entry: {cache_dir.name}")
-                    shutil.rmtree(cache_dir)
-                    removed_count += 1
-                else:
-                    # Calculate human-readable age
-                    age_delta = datetime.now() - file_age
-                    if age_delta.days > 0:
-                        age_str = f"{age_delta.days}d"
-                    elif age_delta.seconds > 3600:
-                        age_str = f"{age_delta.seconds // 3600}h"
-                    elif age_delta.seconds > 60:
-                        age_str = f"{age_delta.seconds // 60}m"
-                    else:
-                        age_str = f"{age_delta.seconds}s"
-                    print(f"Keeping cache entry (age: {age_str}): {cache_dir.name}")
-
-            except Exception as e:
-                print(f"Warning: Could not check age of {cache_dir.name}: {e}")
-                continue
-
-        if removed_count > 0:
-            print(f"Removed {removed_count} cache entries")
-        else:
-            print("No cache entries needed pruning")
-
-        return removed_count
-
-    def prune_builder_cache(self, url: Optional[str] = None) -> int:
-        """Remove cached builder for a specific URL.
-
-        Args:
-            url: URL to remove from cache. If None, uses project's builder_binary URL.
-
-        Returns:
-            Number of cache entries removed (0 or 1)
-        """
-        if not self.executables_dir.exists():
-            return 0
-
-        # Get URL to remove
-        if url is None:
-            try:
-                url = self.load_project_config()
-                print(f"Removing cache for project's builder_binary: {url}")
-            except Exception as e:
-                print(f"Error loading project configuration: {e}", file=sys.stderr)
-                return 0
-        else:
-            print(f"Removing cache for specified URL: {url}")
-
-        # Get paths using centralized path management
-        cache_dir = self._get_builder_cache_dir(url)
-        builder_path = self._get_builder_executable_path_for_url(url)
-
-        if not cache_dir.exists():
-            print(f"No cache entry found for: {url}")
-            return 0
-
-        if not cache_dir.is_dir():
-            print(f"Cache entry is not a directory: {cache_dir}")
-            return 0
-
-        if not builder_path.exists():
-            print(f"No builder executable found in cache entry: {cache_dir}")
-            return 0
-
-        try:
-            print(f"Removing cache entry: {cache_dir.name}")
-            shutil.rmtree(cache_dir)
-            print(f"Successfully removed cache for: {url}")
-            return 1
-        except Exception as e:
-            print(f"Error removing cache entry: {e}", file=sys.stderr)
-            return 0
 
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
@@ -877,7 +780,7 @@ class BuilderManager:
         builder_url = self.load_project_config()
 
         # Validate that the URL is trusted
-        self.validate_builder_url_trust(builder_url)
+        self.trust_manager.validate_builder_url_trust(builder_url)
 
         if not self.is_builder_cached():
             self.download_and_build_builder()
@@ -901,6 +804,18 @@ class BuilderManager:
         except Exception as e:
             print(f"Error running builder: {e}", file=sys.stderr)
             return 1
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def main() -> int:
