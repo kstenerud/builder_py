@@ -226,19 +226,25 @@ class CacheManager:
 
     def __init__(self, path_builder: PathBuilder):
         self.path_builder = path_builder
+        self._ensure_cache_directories()
 
-    def ensure_cache_directories(self) -> None:
+    def _ensure_cache_directories(self) -> None:
         """Create cache and config directories if they don't exist."""
         self.path_builder.get_cache_dir().mkdir(parents=True, exist_ok=True)
         self.path_builder.get_executables_dir().mkdir(parents=True, exist_ok=True)
 
-    def is_builder_cached(self, url: str) -> bool:
+    def _is_builder_cached(self, url: str) -> bool:
         """Check if builder executable is already cached."""
         builder_path = self.path_builder.get_builder_executable_path_for_url(url)
         return builder_path.exists() and builder_path.is_file()
 
     def cache_builder_executable(self, source_path: Path, url: str) -> None:
-        """Copy the builder executable to the cache."""
+        """Copy the builder executable to the cache (idempotent operation)."""
+        # Check if already cached
+        if self._is_builder_cached(url):
+            print(f"Builder already cached for: {url}")
+            return
+
         target_path = self.path_builder.get_builder_executable_path_for_url(url)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -723,7 +729,8 @@ class BuilderManager:
 
     def ensure_cache_directories(self) -> None:
         """Create cache and config directories if they don't exist."""
-        self.cache_manager.ensure_cache_directories()
+        # Cache directories are created by CacheManager constructor
+        # Only need to ensure config directory exists
         self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
     def load_project_config(self) -> str:
@@ -762,7 +769,7 @@ class BuilderManager:
 
     def is_builder_cached(self) -> bool:
         """Check if builder executable is already cached."""
-        return self.cache_manager.is_builder_cached(self.configuration.builder_url)
+        return self.cache_manager._is_builder_cached(self.configuration.builder_url)
 
 
 

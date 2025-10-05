@@ -479,20 +479,20 @@ class TestCacheManager(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_ensure_cache_directories(self) -> None:
-        """Test cache directory creation."""
+        """Test cache directory creation on construction."""
+        # Directories should be created automatically during construction
         cache_manager = CacheManager(self.path_builder)
-        cache_manager.ensure_cache_directories()
 
         self.assertTrue(self.path_builder.get_cache_dir().exists())
         self.assertTrue(self.path_builder.get_executables_dir().exists())
 
     def test_is_builder_cached(self) -> None:
-        """Test checking if builder is cached."""
+        """Test checking if builder is cached (private method)."""
         cache_manager = CacheManager(self.path_builder)
         url = "https://github.com/test/repo.git"
 
         # Initially not cached
-        self.assertFalse(cache_manager.is_builder_cached(url))
+        self.assertFalse(cache_manager._is_builder_cached(url))
 
         # Create cached executable
         exe_path = self.path_builder.get_builder_executable_path_for_url(url)
@@ -500,10 +500,10 @@ class TestCacheManager(unittest.TestCase):
         exe_path.write_text("mock executable")
 
         # Now should be cached
-        self.assertTrue(cache_manager.is_builder_cached(url))
+        self.assertTrue(cache_manager._is_builder_cached(url))
 
     def test_cache_builder_executable(self) -> None:
-        """Test caching builder executable."""
+        """Test caching builder executable with idempotent behavior."""
         cache_manager = CacheManager(self.path_builder)
         url = "https://github.com/test/repo.git"
 
@@ -511,10 +511,17 @@ class TestCacheManager(unittest.TestCase):
         source_path = self.temp_path / "source_builder"
         source_path.write_text("mock executable")
 
+        # Initially not cached
+        self.assertFalse(cache_manager._is_builder_cached(url))
+
         cache_manager.cache_builder_executable(source_path, url)
 
         # Verify it was cached
-        self.assertTrue(cache_manager.is_builder_cached(url))
+        self.assertTrue(cache_manager._is_builder_cached(url))
+
+        # Test idempotent behavior - calling again should not fail
+        cache_manager.cache_builder_executable(source_path, url)
+        self.assertTrue(cache_manager._is_builder_cached(url))
 class TestBuilderManagerIntegration(unittest.TestCase):
     """Integration tests for BuilderManager with real component interactions."""
 
