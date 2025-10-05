@@ -59,12 +59,16 @@ class ProjectConfiguration:
 
 
 class PathBuilder:
-    """Handles all path-based operations for cache directories and URL encoding."""
+    """Manages all path construction and location decisions for the builder system."""
 
-    def __init__(self, executables_dir: Path):
-        self.executables_dir = executables_dir
+    def __init__(self, home_dir: Path):
+        """Initialize PathBuilder with the home directory as base."""
+        self.home_dir = home_dir
+        self.cache_dir = home_dir / ".cache" / "builder"
+        self.executables_dir = self.cache_dir / "executables"
+        self.config_dir = home_dir / ".config" / "builder"
 
-    def caret_encode_url(self, url: str) -> str:
+    def _caret_encode_url(self, url: str) -> str:
         """Encode a URL using caret-encoding for safe use as a directory name."""
         result = []
 
@@ -88,9 +92,29 @@ class PathBuilder:
 
         return ''.join(result)
 
+    def get_cache_dir(self) -> Path:
+        """Get the main cache directory."""
+        return self.cache_dir
+
+    def get_executables_dir(self) -> Path:
+        """Get the executables cache directory."""
+        return self.executables_dir
+
+    def get_config_dir(self) -> Path:
+        """Get the configuration directory."""
+        return self.config_dir
+
+    def get_trusted_urls_file(self) -> Path:
+        """Get the trusted URLs file path."""
+        return self.config_dir / "trusted_urls"
+
+    def get_project_config_file(self, project_root: Path) -> Path:
+        """Get the project configuration file path."""
+        return project_root / "builder.yaml"
+
     def get_builder_cache_dir(self, url: str) -> Path:
         """Get the cache directory for a specific builder URL."""
-        encoded_url = self.caret_encode_url(url)
+        encoded_url = self._caret_encode_url(url)
         return self.executables_dir / encoded_url
 
     def get_builder_executable_path_for_url(self, url: str) -> Path:
@@ -102,11 +126,9 @@ class PathBuilder:
 class TrustManager:
     """Manages trusted URLs for security validation."""
 
-    TRUSTED_URLS_FILE = "trusted_urls"
-
-    def __init__(self, config_dir: Path):
-        self.config_dir = config_dir
-        self.trusted_urls_file = config_dir / self.TRUSTED_URLS_FILE
+    def __init__(self, path_builder: PathBuilder):
+        self.path_builder = path_builder
+        self.trusted_urls_file = path_builder.get_trusted_urls_file()
         self.builtin_trusted_urls = [
             "https://github.com/kstenerud/builder-test.git"
         ]
@@ -134,7 +156,7 @@ class TrustManager:
 
     def save_trusted_urls(self, urls: list[str]) -> None:
         """Save trusted URLs to configuration file."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
         with open(self.trusted_urls_file, 'w') as f:
             f.write("# Trusted URLs for builder script\n")
@@ -201,15 +223,13 @@ class TrustManager:
 class CacheManager:
     """Manages cache operations and directory management."""
 
-    def __init__(self, cache_dir: Path, executables_dir: Path, path_builder: PathBuilder):
-        self.cache_dir = cache_dir
-        self.executables_dir = executables_dir
+    def __init__(self, path_builder: PathBuilder):
         self.path_builder = path_builder
 
     def ensure_cache_directories(self) -> None:
         """Create cache and config directories if they don't exist."""
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.executables_dir.mkdir(parents=True, exist_ok=True)
+        self.path_builder.get_cache_dir().mkdir(parents=True, exist_ok=True)
+        self.path_builder.get_executables_dir().mkdir(parents=True, exist_ok=True)
 
     def is_builder_cached(self, url: str) -> bool:
         """Check if builder executable is already cached."""
@@ -248,7 +268,8 @@ class CacheManager:
 
     def prune_cache(self, max_age: timedelta) -> int:
         """Remove cached builders older than the specified age."""
-        if not self.executables_dir.exists():
+        executables_dir = self.path_builder.get_executables_dir()
+        if not executables_dir.exists():
             return 0
 
         removed_count = 0
@@ -257,7 +278,7 @@ class CacheManager:
         print(f"Pruning cache entries older than {max_age}...")
 
         # Iterate through all cache directories
-        for cache_dir in self.executables_dir.iterdir():
+        for cache_dir in executables_dir.iterdir():
             if not cache_dir.is_dir():
                 continue
 
@@ -298,7 +319,8 @@ class CacheManager:
 
     def prune_builder_cache(self, url: str) -> int:
         """Remove cached builder for a specific URL."""
-        if not self.executables_dir.exists():
+        executables_dir = self.path_builder.get_executables_dir()
+        if not executables_dir.exists():
             return 0
 
         print(f"Removing cache for URL: {url}")
@@ -684,19 +706,16 @@ class BuilderManager:
 
     def __init__(self) -> None:
         """Initialize the builder manager with specialized components."""
-        # Setup directory structure
+        # Setup directory structure and path management
         self.home_dir = Path.home()
-        self.cache_dir = self.home_dir / ".cache" / "builder"
-        self.executables_dir = self.cache_dir / "executables"
-        self.config_dir = self.home_dir / ".config" / "builder"
         self.project_root = Path.cwd()
+        self.path_builder = PathBuilder(self.home_dir)
 
         # Initialize specialized components
-        config_file = self.project_root / ProjectConfiguration.CONFIG_FILE_NAME
+        config_file = self.path_builder.get_project_config_file(self.project_root)
         self.configuration = ProjectConfiguration(config_file)
-        self.path_builder = PathBuilder(self.executables_dir)
-        self.trust_manager = TrustManager(self.config_dir)
-        self.cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
+        self.trust_manager = TrustManager(self.path_builder)
+        self.cache_manager = CacheManager(self.path_builder)
         self.source_manager = SourceManager()
         self.build_manager = BuildManager()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
@@ -704,7 +723,7 @@ class BuilderManager:
     def ensure_cache_directories(self) -> None:
         """Create cache and config directories if they don't exist."""
         self.cache_manager.ensure_cache_directories()
-        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
     def load_project_config(self) -> str:
         """Get builder_binary URL from configuration."""

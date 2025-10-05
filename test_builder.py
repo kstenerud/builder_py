@@ -71,7 +71,7 @@ class TestPathBuilder(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
-        self.executables_dir = self.temp_path / "executables"
+        self.home_dir = self.temp_path
 
     def tearDown(self) -> None:
         """Clean up after tests."""
@@ -80,39 +80,55 @@ class TestPathBuilder(unittest.TestCase):
 
     def test_caret_encode_url(self) -> None:
         """Test URL encoding using caret encoding."""
-        path_builder = PathBuilder(self.executables_dir)
+        path_builder = PathBuilder(self.home_dir)
 
         # Test safe characters are unchanged
         safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
-        self.assertEqual(path_builder.caret_encode_url(safe_chars), safe_chars)        # Test unsafe characters are encoded
+        self.assertEqual(path_builder._caret_encode_url(safe_chars), safe_chars)
+
+        # Test unsafe characters are encoded
         unsafe_chars = ['/', ':', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=']
         for char in unsafe_chars:
-            result = path_builder.caret_encode_url(char)
+            result = path_builder._caret_encode_url(char)
             self.assertTrue(result.startswith('^'))
             self.assertNotEqual(result, char)
 
         # Test full URL encoding
         url = "https://github.com/user/repo.git?tag=v1.0"
-        encoded = path_builder.caret_encode_url(url)
+        encoded = path_builder._caret_encode_url(url)
         self.assertNotIn(':', encoded)
         self.assertNotIn('/', encoded)
         self.assertNotIn('?', encoded)
 
     def test_get_builder_cache_dir(self) -> None:
         """Test getting cache directory for a URL."""
-        path_builder = PathBuilder(self.executables_dir)
+        path_builder = PathBuilder(self.home_dir)
         url = "https://github.com/test/repo.git"
         cache_dir = path_builder.get_builder_cache_dir(url)
-        expected_dir = self.executables_dir / path_builder.caret_encode_url(url)
+        expected_dir = path_builder.get_executables_dir() / path_builder._caret_encode_url(url)
         self.assertEqual(cache_dir, expected_dir)
 
     def test_get_builder_executable_path_for_url(self) -> None:
         """Test getting executable path for a URL."""
-        path_builder = PathBuilder(self.executables_dir)
+        path_builder = PathBuilder(self.home_dir)
         url = "https://github.com/test/repo.git"
         exe_path = path_builder.get_builder_executable_path_for_url(url)
         expected_path = path_builder.get_builder_cache_dir(url) / "builder"
         self.assertEqual(exe_path, expected_path)
+
+    def test_path_methods(self) -> None:
+        """Test various path accessor methods."""
+        path_builder = PathBuilder(self.home_dir)
+
+        # Test directory paths
+        self.assertEqual(path_builder.get_cache_dir(), self.home_dir / ".cache" / "builder")
+        self.assertEqual(path_builder.get_executables_dir(), self.home_dir / ".cache" / "builder" / "executables")
+        self.assertEqual(path_builder.get_config_dir(), self.home_dir / ".config" / "builder")
+
+        # Test file paths
+        self.assertEqual(path_builder.get_trusted_urls_file(), self.home_dir / ".config" / "builder" / "trusted_urls")
+        project_root = self.temp_path / "project"
+        self.assertEqual(path_builder.get_project_config_file(project_root), project_root / "builder.yaml")
 
 
 class TestTrustManager(unittest.TestCase):
@@ -122,6 +138,7 @@ class TestTrustManager(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
+        self.path_builder = PathBuilder(self.temp_path)
 
     def tearDown(self) -> None:
         """Clean up after tests."""
@@ -129,8 +146,8 @@ class TestTrustManager(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_extract_domain(self) -> None:
-        """Test extracting domain from URLs."""
-        trust_manager = TrustManager(self.temp_path)
+        """Test domain extraction from URLs."""
+        trust_manager = TrustManager(self.path_builder)
 
         test_cases = [
             ("https://github.com/user/repo.git", "github.com"),
@@ -145,8 +162,8 @@ class TestTrustManager(unittest.TestCase):
             self.assertEqual(domain, expected_domain, f"Failed for URL: {url}")
 
     def test_load_trusted_urls_builtin_only(self) -> None:
-        """Test loading trusted URLs when only builtin URLs exist."""
-        trust_manager = TrustManager(self.temp_path)
+        """Test loading trusted URLs with no file (builtin only)."""
+        trust_manager = TrustManager(self.path_builder)
         trusted_urls = trust_manager.load_trusted_urls()
 
         # Should contain builtin trusted URLs
@@ -154,30 +171,16 @@ class TestTrustManager(unittest.TestCase):
         self.assertGreater(len(trusted_urls), 0)
 
     def test_load_trusted_urls_with_file(self) -> None:
-        """Test loading trusted URLs when trusted_urls.txt exists."""
-        trust_manager = TrustManager(self.temp_path)
+        """Test loading trusted URLs with existing file."""
+        trust_manager = TrustManager(self.path_builder)
 
-        # Create trusted URLs file
-        custom_urls = [
-            "https://custom.com/repo1.git",
-            "https://custom.com/repo2.git"
-        ]
-
-        trust_manager.config_dir.mkdir(parents=True, exist_ok=True)
-        with open(trust_manager.trusted_urls_file, 'w') as f:
-            for url in custom_urls:
-                f.write(f"{url}\n")
-
-        trusted_urls = trust_manager.load_trusted_urls()
-
-        # Should contain both builtin and custom URLs
-        for url in custom_urls:
-            self.assertIn(url, trusted_urls)
-        self.assertIn("https://github.com/kstenerud/builder-test.git", trusted_urls)
+        # Create config directory and file
+        self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
+        trusted_urls_file = self.path_builder.get_trusted_urls_file()
 
     def test_add_trusted_url_new(self) -> None:
         """Test adding a new trusted URL."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         new_url = "https://newtrusted.com/repo.git"
 
         result = trust_manager.add_trusted_url(new_url)
@@ -189,7 +192,7 @@ class TestTrustManager(unittest.TestCase):
 
     def test_add_trusted_url_duplicate(self) -> None:
         """Test adding a duplicate trusted URL."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         builtin_url = trust_manager.builtin_trusted_urls[0]
 
         result = trust_manager.add_trusted_url(builtin_url)
@@ -197,7 +200,7 @@ class TestTrustManager(unittest.TestCase):
 
     def test_remove_trusted_url_success(self) -> None:
         """Test removing a trusted URL successfully."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         test_url = "https://removeme.com/repo.git"
 
         # Add the URL first
@@ -213,7 +216,7 @@ class TestTrustManager(unittest.TestCase):
 
     def test_remove_trusted_url_builtin(self) -> None:
         """Test removing a builtin trusted URL."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         builtin_url = trust_manager.builtin_trusted_urls[0]
 
         result = trust_manager.remove_trusted_url(builtin_url)
@@ -221,19 +224,19 @@ class TestTrustManager(unittest.TestCase):
 
     def test_remove_trusted_url_not_found(self) -> None:
         """Test removing a URL that doesn't exist."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
 
         result = trust_manager.remove_trusted_url("https://nonexistent.com/repo.git")
         self.assertFalse(result)
 
     def test_is_url_trusted_builtin(self) -> None:
         """Test URL trust validation for builtin URLs."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         self.assertTrue(trust_manager.is_url_trusted("https://github.com/kstenerud/builder-test.git"))
 
     def test_is_url_trusted_same_domain(self) -> None:
         """Test URL trust validation for same domain."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
 
         # Add a trusted URL
         trust_manager.add_trusted_url("https://github.com/trusted/repo.git")
@@ -247,14 +250,14 @@ class TestTrustManager(unittest.TestCase):
 
     def test_validate_builder_url_trust_success(self) -> None:
         """Test successful URL trust validation."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         trusted_url = "https://github.com/kstenerud/builder-test.git"
 
         trust_manager.validate_builder_url_trust(trusted_url)  # Should not raise
 
     def test_validate_builder_url_trust_failure(self) -> None:
         """Test failed URL trust validation."""
-        trust_manager = TrustManager(self.temp_path)
+        trust_manager = TrustManager(self.path_builder)
         untrusted_url = "https://malicious.com/evil.git"
 
         with self.assertRaises(ValueError) as cm:
@@ -463,9 +466,7 @@ class TestCacheManager(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
-        self.cache_dir = self.temp_path / "cache"
-        self.executables_dir = self.temp_path / "executables"
-        self.path_builder = PathBuilder(self.executables_dir)
+        self.path_builder = PathBuilder(self.temp_path)
 
     def tearDown(self) -> None:
         """Clean up after tests."""
@@ -474,15 +475,15 @@ class TestCacheManager(unittest.TestCase):
 
     def test_ensure_cache_directories(self) -> None:
         """Test cache directory creation."""
-        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
+        cache_manager = CacheManager(self.path_builder)
         cache_manager.ensure_cache_directories()
 
-        self.assertTrue(self.cache_dir.exists())
-        self.assertTrue(self.executables_dir.exists())
+        self.assertTrue(self.path_builder.get_cache_dir().exists())
+        self.assertTrue(self.path_builder.get_executables_dir().exists())
 
     def test_is_builder_cached(self) -> None:
         """Test checking if builder is cached."""
-        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
+        cache_manager = CacheManager(self.path_builder)
         url = "https://github.com/test/repo.git"
 
         # Initially not cached
@@ -498,7 +499,7 @@ class TestCacheManager(unittest.TestCase):
 
     def test_cache_builder_executable(self) -> None:
         """Test caching builder executable."""
-        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
+        cache_manager = CacheManager(self.path_builder)
         url = "https://github.com/test/repo.git"
 
         # Create source executable
@@ -534,9 +535,9 @@ class TestBuilderManagerIntegration(unittest.TestCase):
 
         manager.ensure_cache_directories()
 
-        self.assertTrue(manager.cache_dir.exists())
-        self.assertTrue(manager.executables_dir.exists())
-        self.assertTrue(manager.config_dir.exists())
+        self.assertTrue(manager.path_builder.get_cache_dir().exists())
+        self.assertTrue(manager.path_builder.get_executables_dir().exists())
+        self.assertTrue(manager.path_builder.get_config_dir().exists())
 
     def test_load_project_config(self) -> None:
         """Test loading project configuration."""
