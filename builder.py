@@ -80,21 +80,15 @@ class BuilderManager:
             if (char.isalnum() or char in '-_`{}.~'):
                 result.append(char)
             else:
-                # Encode the character
                 if code <= 0xFF:
-                    # 2-digit hex for codes up to 255
                     result.append(f'^{code:02X}')
                 elif code <= 0xFFF:
-                    # 3-digit hex with 'g' modifier
                     result.append(f'^g{code:03X}')
                 elif code <= 0xFFFF:
-                    # 4-digit hex with 'h' modifier
                     result.append(f'^h{code:04X}')
                 elif code <= 0xFFFFF:
-                    # 5-digit hex with 'i' modifier
                     result.append(f'^i{code:05X}')
                 else:
-                    # 6-digit hex with 'j' modifier
                     result.append(f'^j{code:06X}')
 
         return ''.join(result)
