@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import urllib.request
 import zipfile
@@ -119,6 +120,32 @@ class BuilderManager:
             finally:
                 os.unlink(temp_file.name)
 
+    def download_and_extract_tar(self, url: str, extract_dir: Path) -> None:
+        """Download a tar.gz or tgz file and extract it to the specified directory."""
+        print(f"Downloading builder from: {url}")
+
+        # Determine appropriate suffix
+        suffix = '.tar.gz' if url.endswith('.tar.gz') else '.tgz'
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+            try:
+                urllib.request.urlretrieve(url, temp_file.name)
+
+                with tarfile.open(temp_file.name, 'r:gz') as tar_ref:
+                    tar_ref.extractall(extract_dir)
+
+            finally:
+                os.unlink(temp_file.name)
+
+    def download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
+        """Download and extract an archive file based on its extension."""
+        if url.endswith('.zip'):
+            self.download_and_extract_zip(url, extract_dir)
+        elif url.endswith('.tar.gz') or url.endswith('.tgz'):
+            self.download_and_extract_tar(url, extract_dir)
+        else:
+            raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: .zip, .tar.gz, .tgz")
+
     def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
         for root, dirs, files in os.walk(search_dir):
@@ -168,8 +195,8 @@ class BuilderManager:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
-            # Download and extract the zip file
-            self.download_and_extract_zip(builder_url, temp_path)
+            # Download and extract the archive file
+            self.download_and_extract_archive(builder_url, temp_path)
 
             # Find the Rust project root
             rust_project_root = self.find_rust_project_root(temp_path)

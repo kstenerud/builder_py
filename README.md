@@ -48,7 +48,27 @@ builder_binary: "https://github.com/kstenerud/builder-test/archive/refs/tags/1.0
 
 ### Configuration Options
 
-- `builder_binary`: URL pointing to a zip archive containing a Rust project that builds a `builder` executable
+- `builder_binary`: URL pointing to an archive (`.zip`, `.tar.gz`, or `.tgz`) containing a Rust project that builds a `builder` executable
+
+## Supported Archive Formats
+
+The script supports downloading and extracting the following archive formats:
+
+- **ZIP files** (`.zip`): Standard ZIP archives
+- **Gzipped tar files** (`.tar.gz`): Compressed tar archives
+- **Gzipped tar files** (`.tgz`): Compressed tar archives (alternative extension)
+
+Example URLs:
+```yaml
+# ZIP archive
+builder_binary: "https://example.com/project.zip"
+
+# Tar.gz archive
+builder_binary: "https://example.com/project.tar.gz"
+
+# Tgz archive
+builder_binary: "https://example.com/project.tgz"
+```
 
 ## Cache Structure
 

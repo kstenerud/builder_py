@@ -247,6 +247,53 @@ class TestBuilderManager(unittest.TestCase):
         mock_copy.assert_called_once_with(source_path, target_path)
         mock_chmod.assert_called_once_with(0o755)
 
+    def test_download_and_extract_archive_zip(self) -> None:
+        """Test archive format detection for ZIP files."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Mock the download_and_extract_zip method
+        with patch.object(manager, 'download_and_extract_zip') as mock_zip:
+            url = "https://example.com/test.zip"
+            target_dir = self.temp_path / "test"
+            target_dir.mkdir()
+
+            manager.download_and_extract_archive(url, target_dir)
+            mock_zip.assert_called_once_with(url, target_dir)
+
+    def test_download_and_extract_archive_tar_gz(self) -> None:
+        """Test archive format detection for TAR.GZ files."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Mock the download_and_extract_tar method
+        with patch.object(manager, 'download_and_extract_tar') as mock_tar:
+            for url in ["https://example.com/test.tar.gz", "https://example.com/test.tgz"]:
+                with self.subTest(url=url):
+                    target_dir = self.temp_path / "test"
+                    target_dir.mkdir(exist_ok=True)
+
+                    manager.download_and_extract_archive(url, target_dir)
+                    mock_tar.assert_called_with(url, target_dir)
+
+    def test_download_and_extract_archive_unsupported(self) -> None:
+        """Test archive format detection for unsupported formats."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        target_dir = self.temp_path / "test"
+        target_dir.mkdir()
+
+        with self.assertRaises(RuntimeError) as cm:
+            manager.download_and_extract_archive("https://example.com/test.rar", target_dir)
+
+        self.assertIn("Unsupported archive format", str(cm.exception))
+        self.assertIn(".zip, .tar.gz, .tgz", str(cm.exception))
+
+
+if __name__ == '__main__':
+    unittest.main()
+
 
 class TestBuilderManagerIntegration(unittest.TestCase):
     """Integration tests that test the full workflow."""
