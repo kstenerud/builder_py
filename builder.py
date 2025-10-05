@@ -105,14 +105,6 @@ class PathBuilder:
         """Get the configuration directory."""
         return self.config_dir
 
-    def get_trusted_urls_file(self) -> Path:
-        """Get the trusted URLs file path."""
-        return self.config_dir / "trusted_urls"
-
-    def get_project_config_file(self) -> Path:
-        """Get the project configuration file path."""
-        return self.project_root / "builder.yaml"
-
     def get_builder_cache_dir(self, url: str) -> Path:
         """Get the cache directory for a specific builder URL."""
         encoded_url = self._caret_encode_url(url)
@@ -129,7 +121,7 @@ class TrustManager:
 
     def __init__(self, path_builder: PathBuilder):
         self.path_builder = path_builder
-        self.trusted_urls_file = path_builder.get_trusted_urls_file()
+        self.trusted_urls_file = path_builder.get_config_dir() / "trusted_urls"
         self.builtin_trusted_urls = [
             "https://github.com/kstenerud/builder-test.git"
         ]
@@ -740,7 +732,7 @@ class BuilderManager:
         self.path_builder = PathBuilder(self.home_dir, self.project_root)
 
         # Initialize specialized components
-        config_file = self.path_builder.get_project_config_file()
+        config_file = self.path_builder.project_root / "builder.yaml"
         self.configuration = ProjectConfiguration(config_file)
         self.trust_manager = TrustManager(self.path_builder)
         self.cache_manager = CacheManager(self.path_builder)

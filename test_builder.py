@@ -128,8 +128,8 @@ class TestPathBuilder(unittest.TestCase):
         self.assertEqual(path_builder.get_config_dir(), self.home_dir / ".config" / "builder")
 
         # Test file paths
-        self.assertEqual(path_builder.get_trusted_urls_file(), self.home_dir / ".config" / "builder" / "trusted_urls")
-        self.assertEqual(path_builder.get_project_config_file(), self.project_root / "builder.yaml")
+        self.assertEqual(path_builder.get_config_dir() / "trusted_urls", self.home_dir / ".config" / "builder" / "trusted_urls")
+        self.assertEqual(path_builder.project_root / "builder.yaml", self.project_root / "builder.yaml")
 
 
 class TestTrustManager(unittest.TestCase):
@@ -179,7 +179,7 @@ class TestTrustManager(unittest.TestCase):
 
         # Create config directory and file
         self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
-        trusted_urls_file = self.path_builder.get_trusted_urls_file()
+        trusted_urls_file = self.path_builder.get_config_dir() / "trusted_urls"
 
     def test_add_trusted_url_new(self) -> None:
         """Test adding a new trusted URL."""
