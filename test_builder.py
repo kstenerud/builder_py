@@ -148,22 +148,6 @@ class TestTrustManager(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir)
 
-    def test_extract_domain(self) -> None:
-        """Test domain extraction from URLs."""
-        trust_manager = TrustManager(self.path_builder)
-
-        test_cases = [
-            ("https://github.com/user/repo.git", "github.com"),
-            ("http://example.com/path", "example.com"),
-            ("ftp://files.example.org/file.txt", "files.example.org"),
-            ("https://sub.domain.com:8080/path", "sub.domain.com:8080"),
-            ("invalid-url", "")  # Invalid URLs return empty string
-        ]
-
-        for url, expected_domain in test_cases:
-            domain = trust_manager._extract_domain(url)
-            self.assertEqual(domain, expected_domain, f"Failed for URL: {url}")
-
     def test_load_trusted_urls_builtin_only(self) -> None:
         """Test loading trusted URLs with no file (builtin only)."""
         trust_manager = TrustManager(self.path_builder)
@@ -255,19 +239,31 @@ class TestTrustManager(unittest.TestCase):
         trust_manager = TrustManager(self.path_builder)
         self.assertTrue(trust_manager.is_url_trusted("https://github.com/kstenerud/builder-test.git"))
 
-    def test_is_url_trusted_same_domain(self) -> None:
-        """Test URL trust validation for same domain."""
+    def test_is_url_trusted_prefix_matching(self) -> None:
+        """Test URL trust validation using prefix matching."""
         trust_manager = TrustManager(self.path_builder)
 
         # Add a trusted URL
         trust_manager.add_trusted_url("https://github.com/trusted/repo.git")
 
-        # Test same domain URLs
-        self.assertTrue(trust_manager.is_url_trusted("https://github.com/other/repo.git"))
-        self.assertTrue(trust_manager.is_url_trusted("https://github.com/different/project.git"))
+        # Test exact match
+        self.assertTrue(trust_manager.is_url_trusted("https://github.com/trusted/repo.git"))
 
-        # Test different domain
+        # Test prefix matching (should succeed with prefix matching)
+        self.assertTrue(trust_manager.is_url_trusted("https://github.com/trusted/repo.git/malicious"))
+
+        # Test different URLs that don't match the prefix
+        self.assertFalse(trust_manager.is_url_trusted("https://github.com/other/repo.git"))
+        self.assertFalse(trust_manager.is_url_trusted("https://github.com/trusted/other.git"))
+
+        # Test different host/prefix
         self.assertFalse(trust_manager.is_url_trusted("https://malicious.com/repo.git"))
+
+        # Test prefix with directory - more specific trust
+        trust_manager.add_trusted_url("https://github.com/myorg/")
+        self.assertTrue(trust_manager.is_url_trusted("https://github.com/myorg/project1.git"))
+        self.assertTrue(trust_manager.is_url_trusted("https://github.com/myorg/project2.git"))
+        self.assertFalse(trust_manager.is_url_trusted("https://github.com/otherorg/project.git"))
 
     def test_validate_builder_url_trust_success(self) -> None:
         """Test successful URL trust validation."""
@@ -284,7 +280,7 @@ class TestTrustManager(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             trust_manager.validate_builder_url_trust(untrusted_url)
 
-        self.assertIn("Untrusted URL domain", str(cm.exception))
+        self.assertIn("Untrusted URL", str(cm.exception))
 
 
 class TestSourceFetcher(unittest.TestCase):

@@ -64,8 +64,8 @@ BuilderRunner (Orchestrator)
 - **Key Insight**: Path construction logic is centralized to avoid hardcoded paths throughout codebase
 
 #### **TrustManager** - Security Layer
-- Domain-based trust validation for URLs
-- Built-in trusted domains + user-configurable trust list
+- Prefix-based trust validation for URLs
+- Built-in trusted URL prefixes + user-configurable trust list
 - Trust validation happens before any downloads for maximum security
 - **Key Insight**: Security validation occurs at the earliest possible point in the workflow
 
@@ -97,9 +97,9 @@ BuilderRunner (Orchestrator)
 
 ### Security Model
 - **Trust-first approach**: URLs must be trusted before any network operations
-- **Domain-based trust**: Trust applies to entire domains, not individual URLs
-- **Built-in trusted domains**: Default safe sources are included
-- **User extensible**: Users can add/remove trusted domains via CLI
+- **Prefix-based trust**: Trust applies to URL prefixes, providing granular control
+- **Built-in trusted prefixes**: Default safe sources are included
+- **User extensible**: Users can add/remove trusted URL prefixes via CLI
 
 ### Caching Strategy
 - **URL-based keying**: Each unique source URL gets its own cache entry
@@ -228,6 +228,12 @@ builder_binary: /path/to/local/directory
 - Original implementation used `< cutoff_time` for age comparison
 - **Insight**: Age comparisons should be inclusive (`<= cutoff_time`) for intuitive behavior
 - **Result**: Age=0 properly clears entire cache, exact age matches are pruned
+
+### **Trust Validation Security Model**
+
+- Initially used domain-based trust validation (trust entire domains)
+- **Insight**: Domain-based trust creates security vulnerabilities (trusting `github.com` trusts ALL GitHub repositories)
+- **Result**: Prefix-based trust validation provides granular control (trust specific users, organizations, or repositories)
 
 ### **Security-First Architecture**
 - Trust validation was initially scattered throughout the codebase

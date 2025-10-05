@@ -129,11 +129,6 @@ class TrustManager:
             "https://github.com/kstenerud/builder-test.git"
         ]
 
-    def _extract_domain(self, url: str) -> str:
-        """Extract domain from URL for trust validation."""
-        parsed = urlparse(url)
-        return parsed.netloc.lower()
-
     def _save_user_trusted_urls(self, urls: list[str]) -> None:
         """Save user-added trusted URLs to configuration file."""
         # Ensure config directory exists when we need to save
@@ -180,13 +175,11 @@ class TrustManager:
             self._save_user_trusted_urls(user_urls)
 
     def is_url_trusted(self, url: str) -> bool:
-        """Check if a URL is trusted based on domain matching."""
-        url_domain = self._extract_domain(url)
+        """Check if a URL is trusted based on prefix matching."""
         trusted_urls = self.all_trusted_urls()
 
         for trusted_url in trusted_urls:
-            trusted_domain = self._extract_domain(trusted_url)
-            if url_domain == trusted_domain:
+            if url.startswith(trusted_url):
                 return True
 
         return False
@@ -194,15 +187,14 @@ class TrustManager:
     def validate_builder_url_trust(self, url: str) -> None:
         """Validate that a builder URL is trusted."""
         if not self.is_url_trusted(url):
-            url_domain = self._extract_domain(url)
             trusted_urls = self.all_trusted_urls()
-            trusted_domains = [self._extract_domain(u) for u in trusted_urls]
 
-            print(f"Error: Untrusted URL domain '{url_domain}'", file=sys.stderr)
-            print(f"URL: {url}", file=sys.stderr)
-            print(f"Trusted domains: {', '.join(sorted(set(trusted_domains)))}", file=sys.stderr)
+            print(f"Error: Untrusted URL '{url}'", file=sys.stderr)
+            print(f"Trusted URL prefixes:", file=sys.stderr)
+            for trusted_url in sorted(trusted_urls):
+                print(f"  {trusted_url}", file=sys.stderr)
             print(f"Use --trust-yes {url} to add this URL to the trusted list", file=sys.stderr)
-            raise ValueError(f"Untrusted URL domain: {url_domain}")
+            raise ValueError(f"Untrusted URL: {url}")
 
 
 class CacheManager:
