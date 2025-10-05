@@ -157,6 +157,7 @@ class TrustManager:
 
     def _save_trusted_urls(self, urls: list[str]) -> None:
         """Save trusted URLs to configuration file."""
+        # Ensure config directory exists when we need to save
         self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
         with open(self.trusted_urls_file, 'w') as f:
@@ -727,11 +728,7 @@ class BuilderManager:
         self.build_manager = BuildManager()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
-    def ensure_cache_directories(self) -> None:
-        """Create cache and config directories if they don't exist."""
-        # Cache directories are created by CacheManager constructor
-        # Only need to ensure config directory exists
-        self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
+
 
     def load_project_config(self) -> str:
         """Get builder_binary URL from configuration."""
@@ -796,8 +793,6 @@ class BuilderManager:
 
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
-        self.ensure_cache_directories()
-
         # Validate that the URL is trusted
         self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
 

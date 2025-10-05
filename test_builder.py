@@ -541,15 +541,13 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_ensure_cache_directories(self) -> None:
-        """Test that cache directories are created."""
+        """Test that cache directories are created automatically."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
-        manager.ensure_cache_directories()
-
+        # Directories should be created automatically during manager initialization
         self.assertTrue(manager.path_builder.get_cache_dir().exists())
         self.assertTrue(manager.path_builder.get_executables_dir().exists())
-        self.assertTrue(manager.path_builder.get_config_dir().exists())
 
     def test_load_project_config(self) -> None:
         """Test loading project configuration."""
