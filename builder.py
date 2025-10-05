@@ -775,6 +775,9 @@ class BuilderManager:
 
     def download_and_build_builder(self) -> None:
         """Download, build, and cache the builder executable."""
+        # Validate that the URL is trusted before downloading
+        self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
+
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
@@ -791,9 +794,6 @@ class BuilderManager:
 
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
-        # Validate that the URL is trusted
-        self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
-
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
             self.download_and_build_builder()
 
