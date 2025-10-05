@@ -737,7 +737,7 @@ class BuilderManager:
         self.builder_builder = BuilderBuilder()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
-    def ensure_builder_available(self) -> None:
+    def _ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
         self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
@@ -749,7 +749,7 @@ class BuilderManager:
 
     def run_builder(self, args: list[str]) -> int:
         """Run the builder executable with the given arguments."""
-        self.ensure_builder_available()
+        self._ensure_builder_available()
 
         builder_path = self.path_builder.get_builder_executable_path_for_url(self.configuration.builder_url)
 

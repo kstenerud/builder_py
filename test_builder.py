@@ -639,8 +639,8 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         self.assertFalse(manager.cache_manager.is_builder_cached(manager.configuration.builder_url))
 
     @patch('builder.subprocess.run')
-    def test_ensure_builder_available_with_trust_validation(self, mock_run: Mock) -> None:
-        """Test ensuring builder is available with trust validation."""
+    def test_run_builder_with_trust_validation(self, mock_run: Mock) -> None:
+        """Test running builder with trust validation through public interface."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
@@ -648,7 +648,8 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         # This is an integration test, so we won't mock everything
         try:
             # This will fail due to network/build, but trust validation should pass
-            manager.ensure_builder_available()
+            # Testing through public interface instead of private ensure_builder_available
+            manager.run_builder(['--version'])
         except Exception:
             # We expect this to fail at build stage, but trust validation should have passed
             pass
