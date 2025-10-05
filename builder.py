@@ -165,25 +165,19 @@ class TrustManager:
         """Get all trusted URLs (builtin and user-added)."""
         return self.builtin_trusted_urls + self._get_user_trusted_urls()
 
-    def add_trusted_url(self, url: str) -> bool:
+    def add_trusted_url(self, url: str) -> None:
         """Add a URL to the trusted list."""
-        if self.is_url_trusted(url):
-            return False
-
-        user_urls = self._get_user_trusted_urls()
-        user_urls.append(url)
-        self._save_user_trusted_urls(user_urls)
-        return True
-
-    def remove_trusted_url(self, url: str) -> bool:
-        """Remove a URL from the trusted list."""
         user_urls = self._get_user_trusted_urls()
         if url not in user_urls:
-            return False
+            user_urls.append(url)
+            self._save_user_trusted_urls(user_urls)
 
-        user_urls.remove(url)
-        self._save_user_trusted_urls(user_urls)
-        return True
+    def remove_trusted_url(self, url: str) -> None:
+        """Remove a URL from the trusted list."""
+        user_urls = self._get_user_trusted_urls()
+        if url in user_urls:
+            user_urls.remove(url)
+            self._save_user_trusted_urls(user_urls)
 
     def is_url_trusted(self, url: str) -> bool:
         """Check if a URL is trusted based on domain matching."""
@@ -603,10 +597,8 @@ class CommandProcessor:
 
         url = args[2]
         try:
-            if self.trust_manager.add_trusted_url(url):
-                print(f"Added trusted URL: {url}")
-            else:
-                print(f"URL already trusted: {url}")
+            self.trust_manager.add_trusted_url(url)
+            print(f"Added trusted URL: {url}")
             return 0
         except Exception as e:
             self._print_error(f"adding trusted URL: {e}")
@@ -620,10 +612,8 @@ class CommandProcessor:
 
         url = args[2]
         try:
-            if self.trust_manager.remove_trusted_url(url):
-                print(f"Removed trusted URL: {url}")
-            else:
-                print(f"URL not found in trusted list or is built-in: {url}")
+            self.trust_manager.remove_trusted_url(url)
+            print(f"Removed trusted URL: {url}")
             return 0
         except Exception as e:
             self._print_error(f"removing trusted URL: {e}")

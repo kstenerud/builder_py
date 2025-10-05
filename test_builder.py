@@ -186,8 +186,7 @@ class TestTrustManager(unittest.TestCase):
         trust_manager = TrustManager(self.path_builder)
         new_url = "https://newtrusted.com/repo.git"
 
-        result = trust_manager.add_trusted_url(new_url)
-        self.assertTrue(result)
+        trust_manager.add_trusted_url(new_url)
 
         # Verify it was added
         trusted_urls = trust_manager.all_trusted_urls()
@@ -198,8 +197,15 @@ class TestTrustManager(unittest.TestCase):
         trust_manager = TrustManager(self.path_builder)
         builtin_url = trust_manager.builtin_trusted_urls[0]
 
-        result = trust_manager.add_trusted_url(builtin_url)
-        self.assertFalse(result)  # Should return False for duplicate
+        # Get initial count
+        initial_urls = trust_manager.all_trusted_urls()
+        initial_count = len(initial_urls)
+
+        trust_manager.add_trusted_url(builtin_url)
+
+        # Verify the URL was added to user list (even though it's already in builtin list)
+        final_urls = trust_manager.all_trusted_urls()
+        self.assertEqual(len(final_urls), initial_count + 1)
 
     def test_remove_trusted_url_success(self) -> None:
         """Test removing a trusted URL successfully."""
@@ -210,8 +216,7 @@ class TestTrustManager(unittest.TestCase):
         trust_manager.add_trusted_url(test_url)
 
         # Remove it
-        result = trust_manager.remove_trusted_url(test_url)
-        self.assertTrue(result)
+        trust_manager.remove_trusted_url(test_url)
 
         # Verify it was removed
         trusted_urls = trust_manager.all_trusted_urls()
@@ -222,15 +227,28 @@ class TestTrustManager(unittest.TestCase):
         trust_manager = TrustManager(self.path_builder)
         builtin_url = trust_manager.builtin_trusted_urls[0]
 
-        result = trust_manager.remove_trusted_url(builtin_url)
-        self.assertFalse(result)  # Cannot remove builtin URLs
+        # Get initial state
+        initial_urls = trust_manager.all_trusted_urls()
+
+        trust_manager.remove_trusted_url(builtin_url)
+
+        # Verify builtin URL is still present (cannot be removed)
+        final_urls = trust_manager.all_trusted_urls()
+        self.assertIn(builtin_url, final_urls)
 
     def test_remove_trusted_url_not_found(self) -> None:
         """Test removing a URL that doesn't exist."""
         trust_manager = TrustManager(self.path_builder)
+        nonexistent_url = "https://nonexistent.com/repo.git"
 
-        result = trust_manager.remove_trusted_url("https://nonexistent.com/repo.git")
-        self.assertFalse(result)
+        # Get initial state
+        initial_urls = trust_manager.all_trusted_urls()
+
+        trust_manager.remove_trusted_url(nonexistent_url)
+
+        # Verify nothing changed
+        final_urls = trust_manager.all_trusted_urls()
+        self.assertEqual(initial_urls, final_urls)
 
     def test_is_url_trusted_builtin(self) -> None:
         """Test URL trust validation for builtin URLs."""
