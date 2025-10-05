@@ -177,15 +177,10 @@ class TrustManager:
 
     def remove_trusted_url(self, url: str) -> bool:
         """Remove a URL from the trusted list."""
-        if url in self.builtin_trusted_urls:
-            print(f"Cannot remove built-in trusted URL: {url}", file=sys.stderr)
-            return False
-
         user_urls = self._get_user_trusted_urls()
         if url not in user_urls:
             return False
 
-        # Remove from user URLs and save
         user_urls.remove(url)
         self._save_user_trusted_urls(user_urls)
         return True
