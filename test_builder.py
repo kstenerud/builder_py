@@ -14,13 +14,13 @@ from unittest.mock import Mock, patch, MagicMock
 
 # Import the module we're testing
 from builder import (
-    BuilderManager, ConfigManager, PathManager, TrustManager, 
+    BuilderManager, ProjectConfiguration, PathManager, TrustManager,
     CacheManager, SourceManager, BuildManager, CommandProcessor
 )
 
 
-class TestConfigManager(unittest.TestCase):
-    """Test cases for the ConfigManager class."""
+class TestProjectConfiguration(unittest.TestCase):
+    """Test cases for the ProjectConfiguration class."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
@@ -34,33 +34,34 @@ class TestConfigManager(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir)
 
-    def test_load_project_config(self) -> None:
-        """Test loading builder_binary URL from builder.yaml."""
+    def test_builder_url_property(self) -> None:
+        """Test that builder_url is loaded correctly from builder.yaml."""
         with open(self.config_file, 'w') as f:
             f.write(f'builder_binary: {self.test_config_url}\n')
 
-        config_manager = ConfigManager(self.temp_path)
-        self.assertEqual(config_manager.load_project_config(), self.test_config_url)
+        configuration = ProjectConfiguration(self.config_file)
+        self.assertEqual(configuration.builder_url, self.test_config_url)
 
     def test_load_project_config_missing_file(self) -> None:
         """Test loading config with missing builder.yaml file."""
-        config_manager = ConfigManager(self.temp_path)
         with self.assertRaises(FileNotFoundError):
-            config_manager.load_project_config()
+            ProjectConfiguration(self.config_file)
 
     def test_load_project_config_invalid_config(self) -> None:
         """Test loading config with invalid YAML content."""
         with open(self.config_file, 'w') as f:
             f.write('invalid: yaml: content: [unclosed\n')
 
-        config_manager = ConfigManager(self.temp_path)
         with self.assertRaises(Exception):
-            config_manager.load_project_config()
+            ProjectConfiguration(self.config_file)
 
     def test_config_file_property(self) -> None:
         """Test config_file property returns correct path."""
-        config_manager = ConfigManager(self.temp_path)
-        self.assertEqual(config_manager.config_file, self.config_file)
+        with open(self.config_file, 'w') as f:
+            f.write(f'builder_binary: {self.test_config_url}\n')
+
+        configuration = ProjectConfiguration(self.config_file)
+        self.assertEqual(configuration.config_file, self.config_file)
 
 
 class TestPathManager(unittest.TestCase):
@@ -80,7 +81,7 @@ class TestPathManager(unittest.TestCase):
     def test_caret_encode_url(self) -> None:
         """Test URL encoding using caret encoding."""
         path_manager = PathManager(self.executables_dir)
-        
+
         # Test safe characters are unchanged
         safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
         self.assertEqual(path_manager.caret_encode_url(safe_chars), safe_chars)
@@ -132,7 +133,7 @@ class TestTrustManager(unittest.TestCase):
     def test_extract_domain(self) -> None:
         """Test extracting domain from URLs."""
         trust_manager = TrustManager(self.temp_path)
-        
+
         test_cases = [
             ("https://github.com/user/repo.git", "github.com"),
             ("http://example.com/path", "example.com"),
@@ -140,7 +141,7 @@ class TestTrustManager(unittest.TestCase):
             ("https://sub.domain.com:8080/path", "sub.domain.com:8080"),
             ("invalid-url", "")  # Invalid URLs return empty string
         ]
-        
+
         for url, expected_domain in test_cases:
             domain = trust_manager._extract_domain(url)
             self.assertEqual(domain, expected_domain, f"Failed for URL: {url}")
@@ -149,7 +150,7 @@ class TestTrustManager(unittest.TestCase):
         """Test loading trusted URLs when only builtin URLs exist."""
         trust_manager = TrustManager(self.temp_path)
         trusted_urls = trust_manager.load_trusted_urls()
-        
+
         # Should contain builtin trusted URLs
         self.assertIn("https://github.com/kstenerud/builder-test.git", trusted_urls)
         self.assertGreater(len(trusted_urls), 0)
@@ -157,20 +158,20 @@ class TestTrustManager(unittest.TestCase):
     def test_load_trusted_urls_with_file(self) -> None:
         """Test loading trusted URLs when trusted_urls.txt exists."""
         trust_manager = TrustManager(self.temp_path)
-        
+
         # Create trusted URLs file
         custom_urls = [
             "https://custom.com/repo1.git",
             "https://custom.com/repo2.git"
         ]
-        
+
         trust_manager.config_dir.mkdir(parents=True, exist_ok=True)
         with open(trust_manager.trusted_urls_file, 'w') as f:
             for url in custom_urls:
                 f.write(f"{url}\n")
-        
+
         trusted_urls = trust_manager.load_trusted_urls()
-        
+
         # Should contain both builtin and custom URLs
         for url in custom_urls:
             self.assertIn(url, trusted_urls)
@@ -180,10 +181,10 @@ class TestTrustManager(unittest.TestCase):
         """Test adding a new trusted URL."""
         trust_manager = TrustManager(self.temp_path)
         new_url = "https://newtrusted.com/repo.git"
-        
+
         result = trust_manager.add_trusted_url(new_url)
         self.assertTrue(result)
-        
+
         # Verify it was added
         trusted_urls = trust_manager.load_trusted_urls()
         self.assertIn(new_url, trusted_urls)
@@ -192,7 +193,7 @@ class TestTrustManager(unittest.TestCase):
         """Test adding a duplicate trusted URL."""
         trust_manager = TrustManager(self.temp_path)
         builtin_url = trust_manager.builtin_trusted_urls[0]
-        
+
         result = trust_manager.add_trusted_url(builtin_url)
         self.assertFalse(result)  # Should return False for duplicate
 
@@ -200,14 +201,14 @@ class TestTrustManager(unittest.TestCase):
         """Test removing a trusted URL successfully."""
         trust_manager = TrustManager(self.temp_path)
         test_url = "https://removeme.com/repo.git"
-        
+
         # Add the URL first
         trust_manager.add_trusted_url(test_url)
-        
+
         # Remove it
         result = trust_manager.remove_trusted_url(test_url)
         self.assertTrue(result)
-        
+
         # Verify it was removed
         trusted_urls = trust_manager.load_trusted_urls()
         self.assertNotIn(test_url, trusted_urls)
@@ -216,14 +217,14 @@ class TestTrustManager(unittest.TestCase):
         """Test removing a builtin trusted URL."""
         trust_manager = TrustManager(self.temp_path)
         builtin_url = trust_manager.builtin_trusted_urls[0]
-        
+
         result = trust_manager.remove_trusted_url(builtin_url)
         self.assertFalse(result)  # Cannot remove builtin URLs
 
     def test_remove_trusted_url_not_found(self) -> None:
         """Test removing a URL that doesn't exist."""
         trust_manager = TrustManager(self.temp_path)
-        
+
         result = trust_manager.remove_trusted_url("https://nonexistent.com/repo.git")
         self.assertFalse(result)
 
@@ -235,14 +236,14 @@ class TestTrustManager(unittest.TestCase):
     def test_is_url_trusted_same_domain(self) -> None:
         """Test URL trust validation for same domain."""
         trust_manager = TrustManager(self.temp_path)
-        
+
         # Add a trusted URL
         trust_manager.add_trusted_url("https://github.com/trusted/repo.git")
-        
+
         # Test same domain URLs
         self.assertTrue(trust_manager.is_url_trusted("https://github.com/other/repo.git"))
         self.assertTrue(trust_manager.is_url_trusted("https://github.com/different/project.git"))
-        
+
         # Test different domain
         self.assertFalse(trust_manager.is_url_trusted("https://malicious.com/repo.git"))
 
@@ -250,17 +251,17 @@ class TestTrustManager(unittest.TestCase):
         """Test successful URL trust validation."""
         trust_manager = TrustManager(self.temp_path)
         trusted_url = "https://github.com/kstenerud/builder-test.git"
-        
+
         trust_manager.validate_builder_url_trust(trusted_url)  # Should not raise
 
     def test_validate_builder_url_trust_failure(self) -> None:
         """Test failed URL trust validation."""
         trust_manager = TrustManager(self.temp_path)
         untrusted_url = "https://malicious.com/evil.git"
-        
+
         with self.assertRaises(ValueError) as cm:
             trust_manager.validate_builder_url_trust(untrusted_url)
-        
+
         self.assertIn("Untrusted URL domain", str(cm.exception))
 
 
@@ -358,7 +359,7 @@ class TestSourceManager(unittest.TestCase):
     def test_clone_and_checkout_git_default_branch_main(self, mock_run: Mock) -> None:
         """Test Git cloning falls back to main branch."""
         source_manager = SourceManager()
-        
+
         # First call (clone) succeeds, second call (checkout main) succeeds
         mock_run.side_effect = [
             Mock(returncode=0),  # git clone
@@ -434,7 +435,7 @@ class TestBuildManager(unittest.TestCase):
 
         project_dir = self.temp_path / "project"
         project_dir.mkdir()
-        
+
         # Create mock executable
         target_dir = project_dir / "target" / "release"
         target_dir.mkdir(parents=True)
@@ -477,7 +478,7 @@ class TestCacheManager(unittest.TestCase):
         """Test cache directory creation."""
         cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
         cache_manager.ensure_cache_directories()
-        
+
         self.assertTrue(self.cache_dir.exists())
         self.assertTrue(self.executables_dir.exists())
 
@@ -485,15 +486,15 @@ class TestCacheManager(unittest.TestCase):
         """Test checking if builder is cached."""
         cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
         url = "https://github.com/test/repo.git"
-        
+
         # Initially not cached
         self.assertFalse(cache_manager.is_builder_cached(url))
-        
+
         # Create cached executable
         exe_path = self.path_manager.get_builder_executable_path_for_url(url)
         exe_path.parent.mkdir(parents=True, exist_ok=True)
         exe_path.write_text("mock executable")
-        
+
         # Now should be cached
         self.assertTrue(cache_manager.is_builder_cached(url))
 
@@ -501,13 +502,13 @@ class TestCacheManager(unittest.TestCase):
         """Test caching builder executable."""
         cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
         url = "https://github.com/test/repo.git"
-        
+
         # Create source executable
         source_path = self.temp_path / "source_builder"
         source_path.write_text("mock executable")
-        
+
         cache_manager.cache_builder_executable(source_path, url)
-        
+
         # Verify it was cached
         self.assertTrue(cache_manager.is_builder_cached(url))
 
@@ -519,7 +520,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir)
-        
+
         # Create a mock builder.yaml
         self.config_file = self.temp_path / "builder.yaml"
         with open(self.config_file, 'w') as f:
@@ -536,7 +537,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
             manager = BuilderManager()
 
         manager.ensure_cache_directories()
-        
+
         self.assertTrue(manager.cache_dir.exists())
         self.assertTrue(manager.executables_dir.exists())
         self.assertTrue(manager.config_dir.exists())
@@ -566,7 +567,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         exe_path = manager.get_builder_executable_path()
         if exe_path.exists():
             exe_path.unlink()
-        
+
         # Initially not cached
         self.assertFalse(manager.is_builder_cached())
 

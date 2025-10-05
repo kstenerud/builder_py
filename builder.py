@@ -25,17 +25,18 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 
-class ConfigManager:
-    """Manages project configuration loading and parsing."""
+class ProjectConfiguration:
+    """Project configuration loaded from builder.yaml."""
 
     CONFIG_FILE_NAME = "builder.yaml"
 
-    def __init__(self, project_root: Path):
-        self.project_root = project_root
-        self.config_file = project_root / self.CONFIG_FILE_NAME
+    def __init__(self, config_file_path: Path):
+        """Load configuration from the specified builder.yaml file."""
+        self.config_file = config_file_path
+        self._load_config()
 
-    def load_project_config(self) -> str:
-        """Load builder_binary URL from builder.yaml."""
+    def _load_config(self) -> None:
+        """Load and parse the configuration file."""
         if not self.config_file.exists():
             raise FileNotFoundError(f"Project configuration not found: {self.config_file}")
 
@@ -54,7 +55,7 @@ class ConfigManager:
         if not builder_url or not builder_url.strip():
             raise ValueError("Invalid configuration: 'builder_binary' value is empty")
 
-        return builder_url.strip()
+        self.builder_url = builder_url.strip()
 
 
 class PathManager:
@@ -532,10 +533,10 @@ class BuildManager:
 class CommandProcessor:
     """Processes CLI commands and provides help functionality."""
 
-    def __init__(self, trust_manager: TrustManager, cache_manager: CacheManager, config_manager: ConfigManager):
+    def __init__(self, trust_manager: TrustManager, cache_manager: CacheManager, configuration: ProjectConfiguration):
         self.trust_manager = trust_manager
         self.cache_manager = cache_manager
-        self.config_manager = config_manager
+        self.configuration = configuration
 
     def _print_error(self, message: str) -> None:
         """Print error message to stderr with consistent formatting."""
@@ -640,12 +641,8 @@ class CommandProcessor:
         url = args[2] if len(args) >= 3 else None
         try:
             if url is None:
-                try:
-                    url = self.config_manager.load_project_config()
-                    print(f"Removing cache for project's builder_binary: {url}")
-                except Exception as e:
-                    print(f"Error loading project configuration: {e}", file=sys.stderr)
-                    return 0
+                url = self.configuration.builder_url
+                print(f"Removing cache for project's builder_binary: {url}")
             else:
                 print(f"Removing cache for specified URL: {url}")
 
@@ -695,13 +692,14 @@ class BuilderManager:
         self.project_root = Path.cwd()
 
         # Initialize specialized components
-        self.config_manager = ConfigManager(self.project_root)
+        config_file = self.project_root / ProjectConfiguration.CONFIG_FILE_NAME
+        self.configuration = ProjectConfiguration(config_file)
         self.path_manager = PathManager(self.executables_dir)
         self.trust_manager = TrustManager(self.config_dir)
         self.cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
         self.source_manager = SourceManager()
         self.build_manager = BuildManager()
-        self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.config_manager)
+        self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
     def ensure_cache_directories(self) -> None:
         """Create cache and config directories if they don't exist."""
@@ -709,8 +707,8 @@ class BuilderManager:
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
     def load_project_config(self) -> str:
-        """Load builder_binary URL from builder.yaml."""
-        return self.config_manager.load_project_config()
+        """Get builder_binary URL from configuration."""
+        return self.configuration.builder_url
 
     def _handle_trust_yes_command(self, args: list[str]) -> int:
         """Handle --trust-yes command."""
@@ -740,25 +738,21 @@ class BuilderManager:
 
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable for the current project."""
-        builder_url = self.load_project_config()
-        return self.path_manager.get_builder_executable_path_for_url(builder_url)
+        return self.path_manager.get_builder_executable_path_for_url(self.configuration.builder_url)
 
     def is_builder_cached(self) -> bool:
         """Check if builder executable is already cached."""
-        builder_url = self.load_project_config()
-        return self.cache_manager.is_builder_cached(builder_url)
+        return self.cache_manager.is_builder_cached(self.configuration.builder_url)
 
 
 
     def download_and_build_builder(self) -> None:
         """Download, build, and cache the builder executable."""
-        builder_url = self.load_project_config()
-
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
             # Download archive or clone Git repository
-            self.source_manager.download_or_clone_source(builder_url, temp_path)
+            self.source_manager.download_or_clone_source(self.configuration.builder_url, temp_path)
 
             # Find the Rust project root
             rust_project_root = self.build_manager.find_rust_project_root(temp_path)
@@ -769,7 +763,7 @@ class BuilderManager:
             builder_executable = self.build_manager.build_rust_project(rust_project_root)
 
             # Cache the executable
-            self.cache_manager.cache_builder_executable(builder_executable, builder_url)
+            self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
 
 
 
@@ -777,10 +771,8 @@ class BuilderManager:
         """Ensure the builder executable is available, downloading if necessary."""
         self.ensure_cache_directories()
 
-        builder_url = self.load_project_config()
-
         # Validate that the URL is trusted
-        self.trust_manager.validate_builder_url_trust(builder_url)
+        self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
 
         if not self.is_builder_cached():
             self.download_and_build_builder()
