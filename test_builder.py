@@ -254,29 +254,29 @@ class TestBuilderManager(unittest.TestCase):
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
-        # Mock the download_and_extract_zip method
-        with patch.object(manager, 'download_and_extract_zip') as mock_zip:
+        # Mock the _download_and_extract_archive method
+        with patch.object(manager, '_download_and_extract_archive') as mock_download:
             url = "https://example.com/test.zip"
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
             manager.download_and_extract_archive(url, target_dir)
-            mock_zip.assert_called_once_with(url, target_dir)
+            mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_tar_gz(self) -> None:
         """Test archive format detection for TAR.GZ files."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
-        # Mock the download_and_extract_tar method
-        with patch.object(manager, 'download_and_extract_tar') as mock_tar:
+        # Mock the _download_and_extract_archive method
+        with patch.object(manager, '_download_and_extract_archive') as mock_download:
             for url in ["https://example.com/test.tar.gz", "https://example.com/test.tgz"]:
                 with self.subTest(url=url):
                     target_dir = self.temp_path / "test"
                     target_dir.mkdir(exist_ok=True)
 
                     manager.download_and_extract_archive(url, target_dir)
-                    mock_tar.assert_called_with(url, target_dir)
+                    mock_download.assert_called_with(url, target_dir)
 
     def test_download_and_extract_archive_unsupported(self) -> None:
         """Test archive format detection for unsupported formats."""
@@ -782,7 +782,7 @@ class TestBuilderManager(unittest.TestCase):
         with self.assertRaises(RuntimeError) as cm:
             manager.copy_and_extract_file_archive(str(test_file), target_dir)
 
-        self.assertIn("Unsupported local archive format", str(cm.exception))
+        self.assertIn("Unsupported archive format", str(cm.exception))
 
     def test_copy_file_directory(self) -> None:
         """Test copying local directory."""

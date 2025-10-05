@@ -102,6 +102,27 @@ class BuilderManager:
         """
         print(f"Error: {message}", file=sys.stderr)
 
+    def _extract_archive(self, archive_path: Path, extract_dir: Path) -> None:
+        """Extract an archive file to the specified directory.
+
+        Args:
+            archive_path: Path to the archive file
+            extract_dir: Directory to extract to
+
+        Raises:
+            RuntimeError: If archive format is unsupported
+        """
+        archive_str = str(archive_path)
+
+        if archive_str.endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+        elif archive_str.endswith('.tar.gz') or archive_str.endswith('.tgz'):
+            with tarfile.open(archive_path, 'r:gz') as tar_ref:
+                tar_ref.extractall(extract_dir)
+        else:
+            raise RuntimeError(f"Unsupported archive format: {archive_path}. Supported formats: {self._get_supported_archive_formats()}")
+
     def _extract_domain(self, url: str) -> str:
         """Extract domain from URL for trust validation.
 
@@ -348,39 +369,45 @@ class BuilderManager:
         builder_path = self.get_builder_executable_path()
         return builder_path.exists() and builder_path.is_file()
 
-    def download_and_extract_zip(self, url: str, extract_dir: Path) -> None:
-        """Download a zip file and extract it to the specified directory."""
+    def _download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
+        """Download an archive file and extract it to the specified directory.
+
+        Args:
+            url: URL to download archive from
+            extract_dir: Directory to extract archive to
+        """
         print(f"Downloading builder from: {url}")
 
-        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_file:
-            try:
-                urllib.request.urlretrieve(url, temp_file.name)
-
-                with zipfile.ZipFile(temp_file.name, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
-
-            finally:
-                os.unlink(temp_file.name)
-
-    def download_and_extract_tar(self, url: str, extract_dir: Path) -> None:
-        """Download a tar.gz or tgz file and extract it to the specified directory."""
-        print(f"Downloading builder from: {url}")
-
-        # Determine appropriate suffix
-        suffix = '.tar.gz' if url.endswith('.tar.gz') else '.tgz'
+        # Determine appropriate suffix for temporary file
+        if url.endswith('.zip'):
+            suffix = '.zip'
+        elif url.endswith('.tar.gz'):
+            suffix = '.tar.gz'
+        elif url.endswith('.tgz'):
+            suffix = '.tgz'
+        else:
+            suffix = '.tmp'
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
             try:
                 urllib.request.urlretrieve(url, temp_file.name)
-
-                with tarfile.open(temp_file.name, 'r:gz') as tar_ref:
-                    tar_ref.extractall(extract_dir)
-
+                self._extract_archive(Path(temp_file.name), extract_dir)
             finally:
                 os.unlink(temp_file.name)
 
+
+
     def copy_and_extract_file_archive(self, file_path: str, extract_dir: Path) -> None:
-        """Copy and extract a local archive file."""
+        """Copy and extract a local archive file.
+
+        Args:
+            file_path: Path to the local archive file
+            extract_dir: Directory to extract archive to
+
+        Raises:
+            FileNotFoundError: If archive file doesn't exist
+            ValueError: If path is not a file
+        """
         source_path = Path(file_path)
 
         if not source_path.exists():
@@ -390,15 +417,7 @@ class BuilderManager:
             raise ValueError(f"Path is not a file: {file_path}")
 
         print(f"Extracting local archive: {file_path}")
-
-        if file_path.endswith('.zip'):
-            with zipfile.ZipFile(source_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_dir)
-        elif file_path.endswith('.tar.gz') or file_path.endswith('.tgz'):
-            with tarfile.open(source_path, 'r:gz') as tar_ref:
-                tar_ref.extractall(extract_dir)
-        else:
-            raise RuntimeError(f"Unsupported local archive format: {file_path}. Supported formats: {self._get_supported_archive_formats()}")
+        self._extract_archive(source_path, extract_dir)
 
     def copy_file_directory(self, file_path: str, target_dir: Path) -> None:
         """Copy a local directory to the target location."""
@@ -467,11 +486,17 @@ class BuilderManager:
             os.chdir(original_cwd)
 
     def download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
-        """Download and extract an archive file based on its extension."""
-        if url.endswith('.zip'):
-            self.download_and_extract_zip(url, extract_dir)
-        elif url.endswith('.tar.gz') or url.endswith('.tgz'):
-            self.download_and_extract_tar(url, extract_dir)
+        """Download and extract an archive file based on its extension.
+
+        Args:
+            url: URL to download archive from
+            extract_dir: Directory to extract archive to
+
+        Raises:
+            RuntimeError: If archive format is unsupported
+        """
+        if url.endswith(('.zip', '.tar.gz', '.tgz')):
+            self._download_and_extract_archive(url, extract_dir)
         else:
             raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: {self._get_supported_archive_formats()}")
 
