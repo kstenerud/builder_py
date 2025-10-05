@@ -359,8 +359,8 @@ class CacheManager:
             return 0
 
 
-class SourceManager:
-    """Manages archive/Git download and extraction operations."""
+class SourceFetcher:
+    """Fetches source code from URLs, archives, and Git repositories."""
 
     SUPPORTED_ARCHIVE_FORMATS = ".zip, .tar.gz, .tgz"
 
@@ -729,7 +729,7 @@ class BuilderManager:
         self.configuration = ProjectConfiguration(config_file)
         self.trust_manager = TrustManager(self.path_builder)
         self.cache_manager = CacheManager(self.path_builder)
-        self.source_manager = SourceManager()
+        self.source_fetcher = SourceFetcher()
         self.builder_builder = BuilderBuilder()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
@@ -779,7 +779,7 @@ class BuilderManager:
             temp_path = Path(temp_dir)
 
             # Download archive or clone Git repository
-            self.source_manager.download_or_clone_source(self.configuration.builder_url, temp_path)
+            self.source_fetcher.download_or_clone_source(self.configuration.builder_url, temp_path)
 
             # Build the Rust project (BuilderBuilder will find the project root)
             builder_executable = self.builder_builder.build_rust_project(temp_path)

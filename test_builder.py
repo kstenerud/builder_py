@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch, MagicMock
 # Import the module we're testing
 from builder import (
     BuilderManager, ProjectConfiguration, PathBuilder, TrustManager,
-    CacheManager, SourceManager, BuilderBuilder, CommandProcessor
+    CacheManager, SourceFetcher, BuilderBuilder, CommandProcessor
 )
 
 
@@ -269,8 +269,8 @@ class TestTrustManager(unittest.TestCase):
         self.assertIn("Untrusted URL domain", str(cm.exception))
 
 
-class TestSourceManager(unittest.TestCase):
-    """Test cases for the SourceManager class."""
+class TestSourceFetcher(unittest.TestCase):
+    """Test cases for the SourceFetcher class."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
@@ -284,7 +284,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_download_and_extract_archive_zip(self) -> None:
         """Test archive format detection for ZIP files."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
 
         # Mock the _download_and_extract_archive method
         with patch.object(source_manager, '_download_and_extract_archive') as mock_download:
@@ -297,7 +297,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_download_and_extract_archive_tar_gz(self) -> None:
         """Test archive format detection for TAR.GZ files."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
 
         # Mock the _download_and_extract_archive method
         with patch.object(source_manager, '_download_and_extract_archive') as mock_download:
@@ -310,7 +310,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_download_and_extract_archive_unsupported(self) -> None:
         """Test archive format detection for unsupported formats."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
@@ -322,7 +322,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_parse_git_url_with_reference(self) -> None:
         """Test parsing Git URLs with references."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
 
         git_url, ref = source_manager._parse_git_url("https://github.com/user/repo.git#main")
         self.assertEqual(git_url, "https://github.com/user/repo.git")
@@ -338,7 +338,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_parse_git_url_without_reference(self) -> None:
         """Test parsing Git URLs without references."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
 
         git_url, ref = source_manager._parse_git_url("https://github.com/user/repo.git")
         self.assertEqual(git_url, "https://github.com/user/repo.git")
@@ -347,7 +347,7 @@ class TestSourceManager(unittest.TestCase):
     @patch('subprocess.run')
     def test_clone_and_checkout_git_with_reference(self, mock_run: Mock) -> None:
         """Test Git cloning with specific reference."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
         mock_run.return_value.returncode = 0
 
         url = "https://github.com/user/repo.git#v1.0.0"
@@ -362,7 +362,7 @@ class TestSourceManager(unittest.TestCase):
     @patch('subprocess.run')
     def test_clone_and_checkout_git_default_branch_main(self, mock_run: Mock) -> None:
         """Test Git cloning falls back to main branch."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
 
         # First call (clone) succeeds, second call (checkout main) succeeds
         mock_run.side_effect = [
@@ -382,7 +382,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_download_or_clone_source_archive_url(self) -> None:
         """Test source download dispatcher chooses archive extraction for non-Git URLs."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
@@ -392,7 +392,7 @@ class TestSourceManager(unittest.TestCase):
 
     def test_download_or_clone_source_git_url(self) -> None:
         """Test source download dispatcher chooses Git clone for .git URLs."""
-        source_manager = SourceManager()
+        source_manager = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
