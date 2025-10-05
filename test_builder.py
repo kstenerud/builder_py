@@ -537,6 +537,56 @@ class TestCacheManager(unittest.TestCase):
         # Test idempotent behavior - calling again should not fail
         cache_manager.cache_builder_executable(source_path, url)
         self.assertTrue(cache_manager.is_builder_cached(url))
+
+    def test_prune_cache_age_comparison(self) -> None:
+        """Test cache pruning with various age comparisons including edge case for age 0."""
+        from datetime import datetime, timedelta
+        import shutil
+        import time
+
+        cache_manager = CacheManager(self.path_builder)
+
+        # Create multiple cache entries with different ages
+        urls = [
+            "https://github.com/test/repo1.git",
+            "https://github.com/test/repo2.git",
+            "https://github.com/test/repo3.git"
+        ]
+
+        # Create cached executables
+        for url in urls:
+            exe_path = self.path_builder.get_builder_executable_path_for_url(url)
+            exe_path.parent.mkdir(parents=True, exist_ok=True)
+            exe_path.write_text("mock executable")
+            # Verify they are cached
+            self.assertTrue(cache_manager.is_builder_cached(url))
+
+        # Wait a small amount to ensure files have different ages
+        time.sleep(0.01)
+
+        # Test pruning with age 0 - should clear entire cache
+        removed_count = cache_manager.prune_cache(timedelta(seconds=0))
+        self.assertEqual(removed_count, 3, "Age 0 should remove all cache entries")
+
+        # Verify all entries were removed
+        for url in urls:
+            self.assertFalse(cache_manager.is_builder_cached(url), f"Cache entry for {url} should be removed")
+
+        # Recreate cache entries for second test
+        for url in urls:
+            exe_path = self.path_builder.get_builder_executable_path_for_url(url)
+            exe_path.parent.mkdir(parents=True, exist_ok=True)
+            exe_path.write_text("mock executable")
+
+        # Test pruning with very small age - should still remove entries due to <= comparison
+        removed_count = cache_manager.prune_cache(timedelta(microseconds=1))
+        self.assertEqual(removed_count, 3, "Very small age should remove all entries due to <= comparison")
+
+        # Verify all entries were removed
+        for url in urls:
+            self.assertFalse(cache_manager.is_builder_cached(url), f"Cache entry for {url} should be removed with small age")
+
+
 class TestBuilderManagerIntegration(unittest.TestCase):
     """Integration tests for BuilderManager with real component interactions."""
 

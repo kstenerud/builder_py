@@ -270,7 +270,7 @@ class CacheManager:
         return datetime.now()
 
     def prune_cache(self, max_age: timedelta) -> int:
-        """Remove cached builders older than the specified age."""
+        """Remove cached builders older than or equal to the specified age."""
         executables_dir = self.path_builder.get_executables_dir()
         if not executables_dir.exists():
             return 0
@@ -278,7 +278,7 @@ class CacheManager:
         removed_count = 0
         cutoff_time = datetime.now() - max_age
 
-        print(f"Pruning cache entries older than {max_age}...")
+        print(f"Pruning cache entries older than or equal to {max_age}...")
 
         # Iterate through all cache directories
         for cache_dir in executables_dir.iterdir():
@@ -292,7 +292,7 @@ class CacheManager:
             try:
                 file_age = self._get_file_age(builder_path)
 
-                if file_age < cutoff_time:
+                if file_age <= cutoff_time:
                     print(f"Removing old cache entry: {cache_dir.name}")
                     shutil.rmtree(cache_dir)
                     removed_count += 1
@@ -649,7 +649,7 @@ class CommandProcessor:
             return 1
 
     def handle_cache_prune_older_command(self, args: list[str]) -> int:
-        """Handle --cache-prune-older-than command."""
+        """Handle --cache-prune-older-than command (removes entries older than or equal to specified age)."""
         if len(args) < 3:
             self._print_error("--cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)")
             return 1
@@ -685,7 +685,7 @@ class CommandProcessor:
     def handle_cache_help_command(self) -> int:
         """Handle --cache-help command."""
         print("Cache Management:")
-        print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
+        print("  --cache-prune-older-than <time>  Remove cached builders older than or equal to specified time")
         print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
         print("                                   (uses project's builder_binary if no URL specified)")
         print("")
@@ -698,9 +698,9 @@ class CommandProcessor:
         print("  s = seconds, m = minutes, h = hours, d = days")
         print("")
         print("Examples:")
-        print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
-        print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
-        print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
+        print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than or equal to 5 minutes")
+        print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than or equal to 2 hours")
+        print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than or equal to 30 days")
         print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
         print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
         print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
