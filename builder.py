@@ -68,13 +68,42 @@ class BuilderManager:
 
         return builder_url.strip()
 
-        return builder_url
+    def _caret_encode_url(self, url: str) -> str:
+        """Encode a URL using caret-encoding for safe use as a directory name."""
+        result = []
+
+        for char in url:
+            code = ord(char)
+
+            # Safe characters that don't need encoding
+            if (char.isalnum() or char in '-_`{}'):
+                result.append(char)
+            else:
+                # Encode the character
+                if code <= 0xFF:
+                    # 2-digit hex for codes up to 255
+                    result.append(f'^{code:02X}')
+                elif code <= 0xFFF:
+                    # 3-digit hex with 'g' modifier
+                    result.append(f'^g{code:03X}')
+                elif code <= 0xFFFF:
+                    # 4-digit hex with 'h' modifier
+                    result.append(f'^h{code:04X}')
+                elif code <= 0xFFFFF:
+                    # 5-digit hex with 'i' modifier
+                    result.append(f'^i{code:05X}')
+                else:
+                    # 6-digit hex with 'j' modifier
+                    result.append(f'^j{code:06X}')
+
+        return ''.join(result)
 
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable."""
-        # For now, using 'xyz' as the unique directory name
-        # This will be made configurable later for different provenances
-        return self.executables_dir / "xyz" / "builder"
+        # Get the builder URL and caret-encode it for use as directory name
+        builder_url = self.load_project_config()
+        encoded_url = self._caret_encode_url(builder_url)
+        return self.executables_dir / encoded_url / "builder"
 
     def is_builder_cached(self) -> bool:
         """Check if builder executable is already cached."""

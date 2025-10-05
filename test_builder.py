@@ -106,7 +106,9 @@ class TestBuilderManager(unittest.TestCase):
         manager = BuilderManager()
         path = manager.get_builder_executable_path()
 
-        expected_path = self.temp_path / ".cache" / "builder" / "executables" / "xyz" / "builder"
+        # The directory name should be the caret-encoded URL
+        encoded_url = "https^3A^2F^2Fexample^2Ecom^2Ftest^2Ezip"
+        expected_path = self.temp_path / ".cache" / "builder" / "executables" / encoded_url / "builder"
         self.assertEqual(path, expected_path)
 
     @patch('builder.Path.home')
@@ -128,6 +130,38 @@ class TestBuilderManager(unittest.TestCase):
 
         # Now it should be cached
         self.assertTrue(manager.is_builder_cached())
+
+    @patch('builder.Path.cwd')
+    def test_caret_encode_url(self, mock_cwd: Mock) -> None:
+        """Test caret-encoding of URLs."""
+        mock_cwd.return_value = self.temp_path
+
+        manager = BuilderManager()
+
+        # Test safe characters (should not be encoded)
+        safe_chars = 'abc123-_{}'
+        self.assertEqual(manager._caret_encode_url(safe_chars), safe_chars)
+
+        # Test characters that must be encoded
+        test_cases = [
+            (':', '^3A'),
+            ('/', '^2F'),
+            (' ', '^20'),
+            ('@', '^40'),
+            ('#', '^23'),
+            ('.', '^2E'),
+            ('^', '^5E'),
+        ]
+
+        for char, expected in test_cases:
+            result = manager._caret_encode_url(char)
+            self.assertEqual(result, expected, f"Failed to encode '{char}'")
+
+        # Test a full URL
+        url = 'https://example.com/test.zip'
+        encoded = manager._caret_encode_url(url)
+        expected_encoded = 'https^3A^2F^2Fexample^2Ecom^2Ftest^2Ezip'
+        self.assertEqual(encoded, expected_encoded)
 
     def test_find_rust_project_root(self) -> None:
         """Test finding Rust project root."""
