@@ -234,7 +234,7 @@ class CacheManager:
         builder_path = self.path_builder.get_builder_executable_path_for_url(url)
         return builder_path.exists() and builder_path.is_file()
 
-    def cache_builder_executable(self, source_path: Path, url: str) -> None:
+    def cache_builder(self, source_path: Path, url: str) -> None:
         """Copy the builder executable to the cache (idempotent operation)."""
         # Check if already cached
         if self.is_builder_cached(url):
@@ -269,16 +269,16 @@ class CacheManager:
         # If all else fails, use current time (shouldn't happen)
         return datetime.now()
 
-    def prune_older_than_or_equal(self, max_age: timedelta) -> int:
+    def prune_older_than_or_equal(self, age: timedelta) -> int:
         """Remove cached builders older than or equal to the specified age."""
         executables_dir = self.path_builder.get_executables_dir()
         if not executables_dir.exists():
             return 0
 
         removed_count = 0
-        cutoff_time = datetime.now() - max_age
+        cutoff_time = datetime.now() - age
 
-        print(f"Pruning cache entries older than or equal to {max_age}...")
+        print(f"Pruning cache entries older than or equal to {age}...")
 
         # Iterate through all cache directories
         for cache_dir in executables_dir.iterdir():
@@ -745,7 +745,7 @@ class BuilderManager:
                 temp_path = Path(temp_dir)
                 self.source_fetcher.clone_source(self.configuration.builder_url, temp_path)
                 builder_executable = self.builder_builder.build(temp_path)
-                self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
+                self.cache_manager.cache_builder(builder_executable, self.configuration.builder_url)
 
     def run_builder(self, args: list[str]) -> int:
         """Run the builder executable with the given arguments."""

@@ -512,7 +512,7 @@ class TestCacheManager(unittest.TestCase):
         # Now should be cached
         self.assertTrue(cache_manager.is_builder_cached(url))
 
-    def test_cache_builder_executable(self) -> None:
+    def test_cache_builder(self) -> None:
         """Test caching builder executable with idempotent behavior."""
         cache_manager = CacheManager(self.path_builder)
         url = "https://github.com/test/repo.git"
@@ -524,13 +524,13 @@ class TestCacheManager(unittest.TestCase):
         # Initially not cached
         self.assertFalse(cache_manager.is_builder_cached(url))
 
-        cache_manager.cache_builder_executable(source_path, url)
+        cache_manager.cache_builder(source_path, url)
 
         # Verify it was cached
         self.assertTrue(cache_manager.is_builder_cached(url))
 
         # Test idempotent behavior - calling again should not fail
-        cache_manager.cache_builder_executable(source_path, url)
+        cache_manager.cache_builder(source_path, url)
         self.assertTrue(cache_manager.is_builder_cached(url))
 
     def test_prune_older_than_or_equal_age_comparison(self) -> None:
