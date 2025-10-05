@@ -224,18 +224,13 @@ class CacheManager:
 
     def cache_builder(self, source_path: Path, url: str) -> None:
         """Copy the builder executable to the cache (idempotent operation)."""
-        # Check if already cached
         if self.is_builder_cached(url):
-            print(f"Builder already cached for: {url}")
             return
 
         target_path = self.path_builder.get_builder_executable_path_for_url(url)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        print(f"Caching builder executable to: {target_path}")
         shutil.copy2(source_path, target_path)
-
-        # Make sure it's executable
         target_path.chmod(0o755)
 
     def _get_file_age(self, file_path: Path) -> datetime:
@@ -268,7 +263,6 @@ class CacheManager:
 
         print(f"Pruning cache entries older than or equal to {age}...")
 
-        # Iterate through all cache directories
         for cache_dir in executables_dir.iterdir():
             if not cache_dir.is_dir():
                 continue
@@ -303,8 +297,6 @@ class CacheManager:
 
         if removed_count > 0:
             print(f"Removed {removed_count} cache entries")
-        else:
-            print("No cache entries needed pruning")
 
         return removed_count
 
@@ -314,14 +306,10 @@ class CacheManager:
         if not executables_dir.exists():
             return 0
 
-        print(f"Removing cache for URL: {url}")
-
-        # Get paths using path builder
         cache_dir = self.path_builder.get_builder_cache_dir(url)
         builder_path = self.path_builder.get_builder_executable_path_for_url(url)
 
         if not cache_dir.exists():
-            print(f"No cache entry found for: {url}")
             return 0
 
         if not cache_dir.is_dir():
@@ -333,9 +321,8 @@ class CacheManager:
             return 0
 
         try:
-            print(f"Removing cache entry: {cache_dir.name}")
             shutil.rmtree(cache_dir)
-            print(f"Successfully removed cache for: {url}")
+            print(f"Removed cached builder for: {url}")
             return 1
         except Exception as e:
             print(f"Error removing cache entry: {e}", file=sys.stderr)
