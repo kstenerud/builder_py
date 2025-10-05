@@ -400,7 +400,7 @@ class SourceFetcher:
             finally:
                 os.unlink(temp_file.name)
 
-    def copy_and_extract_file_archive(self, file_path: str, extract_dir: Path) -> None:
+    def _copy_and_extract_file_archive(self, file_path: str, extract_dir: Path) -> None:
         """Copy and extract a local archive file."""
         source_path = Path(file_path)
 
@@ -413,7 +413,7 @@ class SourceFetcher:
         print(f"Extracting local archive: {file_path}")
         self._extract_archive(source_path, extract_dir)
 
-    def copy_file_directory(self, file_path: str, target_dir: Path) -> None:
+    def _copy_file_directory(self, file_path: str, target_dir: Path) -> None:
         """Copy a local directory to the target location."""
         source_path = Path(file_path)
 
@@ -495,9 +495,9 @@ class SourceFetcher:
 
         # Check if it's an archive file
         if source_path.is_file() and (file_path.endswith('.zip') or file_path.endswith('.tar.gz') or file_path.endswith('.tgz')):
-            self.copy_and_extract_file_archive(file_path, target_dir)
+            self._copy_and_extract_file_archive(file_path, target_dir)
         elif source_path.is_dir():
-            self.copy_file_directory(file_path, target_dir)
+            self._copy_file_directory(file_path, target_dir)
         else:
             raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive ({self.SUPPORTED_ARCHIVE_FORMATS})")
 
