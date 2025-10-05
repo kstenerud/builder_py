@@ -261,13 +261,10 @@ class CacheManager:
         removed_paths = []
         cutoff_time = datetime.now() - age
 
-        print(f"Pruning cache entries older than or equal to {age}...")
-
         for cache_entry in executables_dir.iterdir():
             if not cache_entry.is_dir():
                 # Remove any non-directory entries as they shouldn't be there
                 try:
-                    print(f"Removing unexpected non-directory entry: {cache_entry.name}")
                     cache_entry.unlink()
                     removed_paths.append(cache_entry)
                 except Exception as e:
@@ -279,31 +276,12 @@ class CacheManager:
                 continue
 
             try:
-                file_age = self._get_file_age(builder_path)
-
-                if file_age <= cutoff_time:
-                    print(f"Removing old cache entry: {cache_entry.name}")
+                if self._get_file_age(builder_path) <= cutoff_time:
                     shutil.rmtree(cache_entry)
                     removed_paths.append(cache_entry)
-                else:
-                    # Calculate human-readable age
-                    age_delta = datetime.now() - file_age
-                    if age_delta.days > 0:
-                        age_str = f"{age_delta.days}d"
-                    elif age_delta.seconds > 3600:
-                        age_str = f"{age_delta.seconds // 3600}h"
-                    elif age_delta.seconds > 60:
-                        age_str = f"{age_delta.seconds // 60}m"
-                    else:
-                        age_str = f"{age_delta.seconds}s"
-                    print(f"Keeping cache entry (age: {age_str}): {cache_entry.name}")
-
             except Exception as e:
                 print(f"Warning: Could not check age of {cache_entry.name}: {e}")
                 continue
-
-        if removed_paths:
-            print(f"Removed {len(removed_paths)} cache entries")
 
         return removed_paths
 

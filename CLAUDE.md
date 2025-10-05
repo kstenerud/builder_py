@@ -188,6 +188,7 @@ builder_binary: /path/to/local/directory
 - Use meaningful variable names
 - Prefer explicit over implicit
 - Keep methods focused and short
+- Put print calls for user-facing messages as close to the UI code as possible (in this case, that's usually in CommandProcessor)
 
 ## Common Pitfalls to Avoid
 
