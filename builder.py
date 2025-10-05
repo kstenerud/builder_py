@@ -535,14 +535,19 @@ class BuildManager:
                 return Path(root)
         return None
 
-    def build_rust_project(self, project_dir: Path) -> Path:
-        """Build the Rust project and return the path to the built executable."""
-        print(f"Building Rust project in: {project_dir}")
+    def build_rust_project(self, source_dir: Path) -> Path:
+        """Find Rust project root in source directory, build it, and return the executable path."""
+        # Find the Rust project root
+        rust_project_root = self.find_rust_project_root(source_dir)
+        if not rust_project_root:
+            raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
+
+        print(f"Building Rust project in: {rust_project_root}")
 
         # Run cargo build in release mode
         result = subprocess.run(
             ['cargo', 'build', '--release'],
-            cwd=project_dir,
+            cwd=rust_project_root,
             capture_output=True,
             text=True
         )
@@ -551,7 +556,7 @@ class BuildManager:
             raise RuntimeError(f"Failed to build Rust project:\n{result.stderr}")
 
         # Find the built executable
-        target_dir = project_dir / "target" / "release"
+        target_dir = rust_project_root / "target" / "release"
         builder_executable = target_dir / "builder"
 
         if not builder_executable.exists():
@@ -776,13 +781,8 @@ class BuilderManager:
             # Download archive or clone Git repository
             self.source_manager.download_or_clone_source(self.configuration.builder_url, temp_path)
 
-            # Find the Rust project root
-            rust_project_root = self.build_manager.find_rust_project_root(temp_path)
-            if not rust_project_root:
-                raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
-
-            # Build the Rust project
-            builder_executable = self.build_manager.build_rust_project(rust_project_root)
+            # Build the Rust project (BuildManager will find the project root)
+            builder_executable = self.build_manager.build_rust_project(temp_path)
 
             # Cache the executable
             self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)

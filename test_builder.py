@@ -437,8 +437,15 @@ class TestBuildManager(unittest.TestCase):
         build_manager = BuildManager()
         mock_run.return_value.returncode = 0
 
-        project_dir = self.temp_path / "project"
+        # Create source directory with Rust project
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
+        project_dir = source_dir / "project"
         project_dir.mkdir()
+
+        # Create Cargo.toml to make it a Rust project
+        cargo_toml = project_dir / "Cargo.toml"
+        cargo_toml.write_text("[package]\nname = \"builder\"\nversion = \"0.1.0\"")
 
         # Create mock executable
         target_dir = project_dir / "target" / "release"
@@ -446,7 +453,7 @@ class TestBuildManager(unittest.TestCase):
         builder_exe = target_dir / "builder"
         builder_exe.write_text("mock executable")
 
-        result = build_manager.build_rust_project(project_dir)
+        result = build_manager.build_rust_project(source_dir)
         self.assertEqual(result, builder_exe)
 
     @patch('subprocess.run')
@@ -454,12 +461,20 @@ class TestBuildManager(unittest.TestCase):
         """Test Rust project build failure."""
         build_manager = BuildManager()
         mock_run.return_value.returncode = 1
+        mock_run.return_value.stderr = "Build failed"
 
-        project_dir = self.temp_path / "project"
+        # Create source directory with Rust project
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
+        project_dir = source_dir / "project"
         project_dir.mkdir()
 
+        # Create Cargo.toml to make it a Rust project
+        cargo_toml = project_dir / "Cargo.toml"
+        cargo_toml.write_text("[package]\nname = \"builder\"\nversion = \"0.1.0\"")
+
         with self.assertRaises(RuntimeError):
-            build_manager.build_rust_project(project_dir)
+            build_manager.build_rust_project(source_dir)
 
 
 class TestCacheManager(unittest.TestCase):
