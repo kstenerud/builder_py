@@ -252,13 +252,13 @@ class CacheManager:
         # If all else fails, use current time (shouldn't happen)
         return datetime.now()
 
-    def prune_older_than_or_equal(self, age: timedelta) -> int:
+    def prune_older_than_or_equal(self, age: timedelta) -> list[Path]:
         """Remove cached builders older than or equal to the specified age."""
         executables_dir = self.path_builder.get_executables_dir()
         if not executables_dir.exists():
-            return 0
+            return []
 
-        removed_count = 0
+        removed_paths = []
         cutoff_time = datetime.now() - age
 
         print(f"Pruning cache entries older than or equal to {age}...")
@@ -269,7 +269,7 @@ class CacheManager:
                 try:
                     print(f"Removing unexpected non-directory entry: {cache_entry.name}")
                     cache_entry.unlink()
-                    removed_count += 1
+                    removed_paths.append(cache_entry)
                 except Exception as e:
                     print(f"Warning: Could not remove non-directory entry {cache_entry.name}: {e}")
                 continue
@@ -284,7 +284,7 @@ class CacheManager:
                 if file_age <= cutoff_time:
                     print(f"Removing old cache entry: {cache_entry.name}")
                     shutil.rmtree(cache_entry)
-                    removed_count += 1
+                    removed_paths.append(cache_entry)
                 else:
                     # Calculate human-readable age
                     age_delta = datetime.now() - file_age
@@ -302,34 +302,32 @@ class CacheManager:
                 print(f"Warning: Could not check age of {cache_entry.name}: {e}")
                 continue
 
-        if removed_count > 0:
-            print(f"Removed {removed_count} cache entries")
+        if removed_paths:
+            print(f"Removed {len(removed_paths)} cache entries")
 
-        return removed_count
+        return removed_paths
 
-    def prune_builder(self, url: str) -> int:
+    def prune_builder(self, url: str) -> Optional[Path]:
         """Remove cached builder for a specific URL."""
         executables_dir = self.path_builder.get_executables_dir()
         if not executables_dir.exists():
-            return 0
+            return None
 
         cache_dir = self.path_builder.get_builder_cache_dir(url)
 
         if not cache_dir.exists():
-            return 0
+            return None
 
         try:
             if cache_dir.is_dir():
                 shutil.rmtree(cache_dir)
-                print(f"Removed cached builder for: {url}")
             else:
                 # Remove unexpected non-directory entry
                 cache_dir.unlink()
-                print(f"Removed unexpected non-directory cache entry for: {url}")
-            return 1
+            return cache_dir
         except Exception as e:
             print(f"Error removing cache entry: {e}", file=sys.stderr)
-            return 0
+            return None
 
 
 class SourceFetcher:
@@ -631,7 +629,7 @@ class CommandProcessor:
         time_spec = args[2]
         try:
             max_age = self._parse_time_spec(time_spec)
-            removed = self.cache_manager.prune_older_than_or_equal(max_age)
+            removed_paths = self.cache_manager.prune_older_than_or_equal(max_age)
             return 0
         except ValueError as e:
             self._print_error(str(e))
@@ -650,7 +648,7 @@ class CommandProcessor:
             else:
                 print(f"Removing cache for specified URL: {url}")
 
-            removed = self.cache_manager.prune_builder(url)
+            removed_path = self.cache_manager.prune_builder(url)
             return 0
         except Exception as e:
             self._print_error(f"during builder cache pruning: {e}")
