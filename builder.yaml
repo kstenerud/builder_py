@@ -1,5 +1,5 @@
 # Builder configuration file
 # Specifies where to download the builder binary from
 
-# URL pointing to a zip archive containing the rust project
-builder_binary: "https://github.com/kstenerud/builder-test/archive/refs/tags/1.0.2.zip"
+# URL pointing to a Git repository containing the rust project
+builder_binary: "https://github.com/kstenerud/builder-test.git"

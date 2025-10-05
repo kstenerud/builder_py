@@ -19,7 +19,7 @@ import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 
 class BuilderManager:
@@ -68,6 +68,20 @@ class BuilderManager:
             raise ValueError("Invalid configuration: 'builder_binary' value is empty")
 
         return builder_url.strip()
+
+    def _parse_git_url(self, url: str) -> Tuple[str, Optional[str]]:
+        """Parse a Git URL and extract the base URL and optional reference.
+
+        Args:
+            url: Git URL potentially ending with .git#<reference>
+
+        Returns:
+            Tuple of (base_git_url, reference_or_none)
+        """
+        if '#' in url:
+            git_url, reference = url.split('#', 1)
+            return git_url, reference
+        return url, None
 
     def _caret_encode_url(self, url: str) -> str:
         """Encode a URL using caret-encoding for safe use as a directory name."""
@@ -137,6 +151,57 @@ class BuilderManager:
             finally:
                 os.unlink(temp_file.name)
 
+    def clone_and_checkout_git(self, url: str, clone_dir: Path) -> None:
+        """Clone a Git repository and checkout the specified reference."""
+        git_url, reference = self._parse_git_url(url)
+
+        print(f"Cloning Git repository from: {git_url}")
+        if reference:
+            print(f"Will checkout reference: {reference}")
+
+        # Clone with minimal data transfer
+        result = subprocess.run(
+            ['git', 'clone', '--filter=blob:none', '--no-checkout', '--single-branch', git_url, str(clone_dir)],
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to clone Git repository:\n{result.stderr}")
+
+        # Change to repository directory for checkout operations
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(clone_dir)
+
+            if reference:
+                # Checkout the specified reference
+                result = subprocess.run(
+                    ['git', 'checkout', reference],
+                    capture_output=True,
+                    text=True
+                )
+
+                if result.returncode != 0:
+                    raise RuntimeError(f"Failed to checkout reference '{reference}':\n{result.stderr}")
+            else:
+                # Try to checkout 'main', then 'master' as fallback
+                for branch in ['main', 'master']:
+                    result = subprocess.run(
+                        ['git', 'checkout', branch],
+                        capture_output=True,
+                        text=True
+                    )
+
+                    if result.returncode == 0:
+                        print(f"Checked out default branch: {branch}")
+                        break
+                else:
+                    raise RuntimeError("Neither 'main' nor 'master' branch exists in the repository")
+
+        finally:
+            os.chdir(original_cwd)
+
     def download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
         """Download and extract an archive file based on its extension."""
         if url.endswith('.zip'):
@@ -145,6 +210,16 @@ class BuilderManager:
             self.download_and_extract_tar(url, extract_dir)
         else:
             raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: .zip, .tar.gz, .tgz")
+
+    def download_or_clone_source(self, url: str, target_dir: Path) -> None:
+        """Download archive or clone Git repository based on URL format."""
+        # Check if it's a Git URL (ends with .git, potentially followed by #reference)
+        git_url, _ = self._parse_git_url(url)
+        if git_url.endswith('.git'):
+            self.clone_and_checkout_git(url, target_dir)
+        else:
+            # It's an archive URL
+            self.download_and_extract_archive(url, target_dir)
 
     def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
@@ -195,13 +270,13 @@ class BuilderManager:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
-            # Download and extract the archive file
-            self.download_and_extract_archive(builder_url, temp_path)
+            # Download archive or clone Git repository
+            self.download_or_clone_source(builder_url, temp_path)
 
             # Find the Rust project root
             rust_project_root = self.find_rust_project_root(temp_path)
             if not rust_project_root:
-                raise RuntimeError("No Rust project (Cargo.toml) found in downloaded archive")
+                raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
 
             # Build the Rust project
             builder_executable = self.build_rust_project(rust_project_root)

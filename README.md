@@ -48,27 +48,50 @@ builder_binary: "https://github.com/kstenerud/builder-test/archive/refs/tags/1.0
 
 ### Configuration Options
 
-- `builder_binary`: URL pointing to an archive (`.zip`, `.tar.gz`, or `.tgz`) containing a Rust project that builds a `builder` executable
+- `builder_binary`: URL pointing to either:
+  - An archive (`.zip`, `.tar.gz`, or `.tgz`) containing a Rust project that builds a `builder` executable
+  - A Git repository (ending in `.git`) containing a Rust project that builds a `builder` executable
 
-## Supported Archive Formats
+## Supported Source Formats
 
-The script supports downloading and extracting the following archive formats:
+The script supports downloading from multiple source types:
+
+### Archive Formats
 
 - **ZIP files** (`.zip`): Standard ZIP archives
 - **Gzipped tar files** (`.tar.gz`): Compressed tar archives
 - **Gzipped tar files** (`.tgz`): Compressed tar archives (alternative extension)
 
+### Git Repositories
+
+- **Git URLs** (ending in `.git`): Clone Git repositories directly
+- **Git URLs with references** (`.git#<reference>`): Clone and checkout specific branches, tags, or commits
+
 Example URLs:
+
 ```yaml
-# ZIP archive
+# Archive formats
 builder_binary: "https://example.com/project.zip"
-
-# Tar.gz archive
 builder_binary: "https://example.com/project.tar.gz"
-
-# Tgz archive
 builder_binary: "https://example.com/project.tgz"
+
+# Git repositories
+builder_binary: "https://github.com/user/project.git"
+builder_binary: "https://github.com/user/project.git#main"
+builder_binary: "https://github.com/user/project.git#v1.0.0"
+builder_binary: "https://github.com/user/project.git#abc123def"
 ```
+
+### Git Reference Behavior
+
+- **With reference** (`#branch`, `#tag`, or `#commit`): Checkout the specified reference
+- **Without reference**: Attempt to checkout `main` branch, fallback to `master` if `main` doesn't exist
+- **Error handling**: Fail if neither `main` nor `master` branches exist when no reference is specified
+
+The Git clone operation uses optimized flags for minimal bandwidth:
+- `--filter=blob:none`: Skip downloading file contents initially
+- `--no-checkout`: Don't checkout files during clone
+- `--single-branch`: Only clone the default branch initially
 
 ## Cache Structure
 
@@ -180,12 +203,20 @@ The main `BuilderManager` class handles:
 The project is configured to use the test repository at:
 https://github.com/kstenerud/builder-test
 
-Available test versions:
+Available test versions (archives):
+
 - 1.0.0: `https://github.com/kstenerud/builder-test/archive/refs/tags/1.0.0.zip`
 - 1.0.1: `https://github.com/kstenerud/builder-test/archive/refs/tags/1.0.1.zip`
 - 1.0.2: `https://github.com/kstenerud/builder-test/archive/refs/tags/1.0.2.zip`
 
+Available test versions (Git):
+
+- Latest: `https://github.com/kstenerud/builder-test.git`
+- Specific tag: `https://github.com/kstenerud/builder-test.git#1.0.2`
+- Specific branch: `https://github.com/kstenerud/builder-test.git#main`
+
 The test builder executable:
+
 - Echoes back command-line arguments (one per line)
 - Shows version information when called with `--version`
 - Includes git commit, tag, and branch information if available
@@ -201,6 +232,7 @@ The test builder executable:
 
 - Python 3.7+
 - Rust toolchain (cargo) for building downloaded projects
+- Git command-line tool (for Git repository support)
 
 **No external Python dependencies required** - uses only the Python standard library.
 

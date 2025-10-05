@@ -290,6 +290,182 @@ class TestBuilderManager(unittest.TestCase):
         self.assertIn("Unsupported archive format", str(cm.exception))
         self.assertIn(".zip, .tar.gz, .tgz", str(cm.exception))
 
+    def test_parse_git_url_with_reference(self) -> None:
+        """Test parsing Git URLs with references."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Test URL with branch reference
+        git_url, ref = manager._parse_git_url("https://github.com/user/repo.git#main")
+        self.assertEqual(git_url, "https://github.com/user/repo.git")
+        self.assertEqual(ref, "main")
+
+        # Test URL with tag reference
+        git_url, ref = manager._parse_git_url("https://github.com/user/repo.git#v1.0.0")
+        self.assertEqual(git_url, "https://github.com/user/repo.git")
+        self.assertEqual(ref, "v1.0.0")
+
+        # Test URL with commit reference
+        git_url, ref = manager._parse_git_url("https://github.com/user/repo.git#abc123")
+        self.assertEqual(git_url, "https://github.com/user/repo.git")
+        self.assertEqual(ref, "abc123")
+
+    def test_parse_git_url_without_reference(self) -> None:
+        """Test parsing Git URLs without references."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        git_url, ref = manager._parse_git_url("https://github.com/user/repo.git")
+        self.assertEqual(git_url, "https://github.com/user/repo.git")
+        self.assertIsNone(ref)
+
+    @patch('builder.subprocess.run')
+    def test_clone_and_checkout_git_with_reference(self, mock_run: Mock) -> None:
+        """Test Git cloning with a specific reference."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Mock successful clone and checkout
+        mock_run.side_effect = [
+            Mock(returncode=0),  # clone
+            Mock(returncode=0)   # checkout
+        ]
+
+        target_dir = self.temp_path / "test_repo"
+        url = "https://github.com/user/repo.git#v1.0.0"
+
+        with patch('builder.os.chdir') as mock_chdir, patch('builder.os.getcwd', return_value='/original'):
+            manager.clone_and_checkout_git(url, target_dir)
+
+        # Verify clone command
+        mock_run.assert_any_call(
+            ['git', 'clone', '--filter=blob:none', '--no-checkout', '--single-branch',
+             'https://github.com/user/repo.git', str(target_dir)],
+            capture_output=True,
+            text=True
+        )
+
+        # Verify checkout command
+        mock_run.assert_any_call(
+            ['git', 'checkout', 'v1.0.0'],
+            capture_output=True,
+            text=True
+        )
+
+    @patch('builder.subprocess.run')
+    def test_clone_and_checkout_git_default_branch_main(self, mock_run: Mock) -> None:
+        """Test Git cloning with default branch (main)."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Mock successful clone and main checkout
+        mock_run.side_effect = [
+            Mock(returncode=0),  # clone
+            Mock(returncode=0)   # checkout main
+        ]
+
+        target_dir = self.temp_path / "test_repo"
+        url = "https://github.com/user/repo.git"
+
+        with patch('builder.os.chdir') as mock_chdir, patch('builder.os.getcwd', return_value='/original'):
+            manager.clone_and_checkout_git(url, target_dir)
+
+        # Verify checkout tried main first
+        mock_run.assert_any_call(
+            ['git', 'checkout', 'main'],
+            capture_output=True,
+            text=True
+        )
+
+    @patch('builder.subprocess.run')
+    def test_clone_and_checkout_git_fallback_to_master(self, mock_run: Mock) -> None:
+        """Test Git cloning falls back to master when main doesn't exist."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Mock successful clone, failed main checkout, successful master checkout
+        mock_run.side_effect = [
+            Mock(returncode=0),  # clone
+            Mock(returncode=1),  # checkout main (fails)
+            Mock(returncode=0)   # checkout master (succeeds)
+        ]
+
+        target_dir = self.temp_path / "test_repo"
+        url = "https://github.com/user/repo.git"
+
+        with patch('builder.os.chdir') as mock_chdir, patch('builder.os.getcwd', return_value='/original'):
+            manager.clone_and_checkout_git(url, target_dir)
+
+        # Verify both branches were tried
+        mock_run.assert_any_call(
+            ['git', 'checkout', 'main'],
+            capture_output=True,
+            text=True
+        )
+        mock_run.assert_any_call(
+            ['git', 'checkout', 'master'],
+            capture_output=True,
+            text=True
+        )
+
+    @patch('builder.subprocess.run')
+    def test_clone_and_checkout_git_no_default_branches(self, mock_run: Mock) -> None:
+        """Test Git cloning fails when neither main nor master exist."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Mock successful clone but failed checkouts for both branches
+        mock_run.side_effect = [
+            Mock(returncode=0),  # clone
+            Mock(returncode=1),  # checkout main (fails)
+            Mock(returncode=1)   # checkout master (fails)
+        ]
+
+        target_dir = self.temp_path / "test_repo"
+        url = "https://github.com/user/repo.git"
+
+        with patch('builder.os.chdir') as mock_chdir, patch('builder.os.getcwd', return_value='/original'):
+            with self.assertRaises(RuntimeError) as cm:
+                manager.clone_and_checkout_git(url, target_dir)
+
+        self.assertIn("Neither 'main' nor 'master' branch exists", str(cm.exception))
+
+    def test_download_or_clone_source_git_url(self) -> None:
+        """Test source download dispatcher chooses Git for .git URLs."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        target_dir = self.temp_path / "test"
+        target_dir.mkdir()
+
+        with patch.object(manager, 'clone_and_checkout_git') as mock_git:
+            manager.download_or_clone_source("https://github.com/user/repo.git", target_dir)
+            mock_git.assert_called_once_with("https://github.com/user/repo.git", target_dir)
+
+    def test_download_or_clone_source_git_url_with_reference(self) -> None:
+        """Test source download dispatcher chooses Git for .git URLs with references."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        target_dir = self.temp_path / "test"
+        target_dir.mkdir()
+
+        with patch.object(manager, 'clone_and_checkout_git') as mock_git:
+            manager.download_or_clone_source("https://github.com/user/repo.git#v1.0.0", target_dir)
+            mock_git.assert_called_once_with("https://github.com/user/repo.git#v1.0.0", target_dir)
+
+    def test_download_or_clone_source_archive_url(self) -> None:
+        """Test source download dispatcher chooses archive extraction for non-Git URLs."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        target_dir = self.temp_path / "test"
+        target_dir.mkdir()
+
+        with patch.object(manager, 'download_and_extract_archive') as mock_archive:
+            manager.download_or_clone_source("https://example.com/project.zip", target_dir)
+            mock_archive.assert_called_once_with("https://example.com/project.zip", target_dir)
+
 
 if __name__ == '__main__':
     unittest.main()

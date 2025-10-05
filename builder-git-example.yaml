@@ -1,0 +1,20 @@
+# Example builder configuration using Git repository
+#
+# This demonstrates how to configure builder.py to use a Git repository
+# instead of downloading archive files.
+
+# Basic Git repository (will checkout 'main' or 'master' branch)
+builder_binary: "https://github.com/kstenerud/builder-test.git"
+
+# Git repository with specific branch
+# builder_binary: "https://github.com/kstenerud/builder-test.git#main"
+
+# Git repository with specific tag
+# builder_binary: "https://github.com/kstenerud/builder-test.git#1.0.2"
+
+# Git repository with specific commit hash
+# builder_binary: "https://github.com/kstenerud/builder-test.git#abc123def"
+
+# You can also use other Git hosting services:
+# builder_binary: "https://gitlab.com/user/project.git"
+# builder_binary: "https://bitbucket.org/user/project.git"
