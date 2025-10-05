@@ -292,7 +292,7 @@ class TestSourceFetcher(unittest.TestCase):
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
-            source_manager.download_or_clone_source(url, target_dir)
+            source_manager.clone_source(url, target_dir)
             mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_tar_gz(self) -> None:
@@ -305,7 +305,7 @@ class TestSourceFetcher(unittest.TestCase):
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
-            source_manager.download_or_clone_source(url, target_dir)
+            source_manager.clone_source(url, target_dir)
             mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_unsupported(self) -> None:
@@ -315,7 +315,7 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir.mkdir()
 
         with self.assertRaises(RuntimeError) as cm:
-            source_manager.download_or_clone_source("https://example.com/test.rar", target_dir)
+            source_manager.clone_source("https://example.com/test.rar", target_dir)
 
         self.assertIn("Unsupported archive format", str(cm.exception))
 
@@ -353,7 +353,7 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        source_manager.download_or_clone_source(url, target_dir)
+        source_manager.clone_source(url, target_dir)
 
         # Should call git clone and checkout
         self.assertEqual(mock_run.call_count, 2)
@@ -373,30 +373,30 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        source_manager.download_or_clone_source(url, target_dir)
+        source_manager.clone_source(url, target_dir)
 
         # Should try main branch
         self.assertEqual(mock_run.call_count, 2)
         self.assertIn("main", str(mock_run.call_args_list[1]))
 
-    def test_download_or_clone_source_archive_url(self) -> None:
+    def test_clone_source_archive_url(self) -> None:
         """Test source download dispatcher chooses archive extraction for non-Git URLs."""
         source_manager = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
         with patch.object(source_manager, '_download_and_extract_archive_by_extension') as mock_archive:
-            source_manager.download_or_clone_source("https://example.com/project.zip", target_dir)
+            source_manager.clone_source("https://example.com/project.zip", target_dir)
             mock_archive.assert_called_once_with("https://example.com/project.zip", target_dir)
 
-    def test_download_or_clone_source_git_url(self) -> None:
+    def test_clone_source_git_url(self) -> None:
         """Test source download dispatcher chooses Git clone for .git URLs."""
         source_manager = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
         with patch.object(source_manager, '_clone_and_checkout_git') as mock_git:
-            source_manager.download_or_clone_source("https://github.com/user/repo.git", target_dir)
+            source_manager.clone_source("https://github.com/user/repo.git", target_dir)
             mock_git.assert_called_once_with("https://github.com/user/repo.git", target_dir)
 
 

@@ -501,7 +501,7 @@ class SourceFetcher:
         else:
             raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive ({self.SUPPORTED_ARCHIVE_FORMATS})")
 
-    def download_or_clone_source(self, url: str, target_dir: Path) -> None:
+    def clone_source(self, url: str, target_dir: Path) -> None:
         """Download archive, clone Git repository, or copy local files based on URL format."""
         # Check if it's a file URL
         if url.startswith('file://'):
@@ -743,7 +743,7 @@ class BuilderManager:
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
-                self.source_fetcher.download_or_clone_source(self.configuration.builder_url, temp_path)
+                self.source_fetcher.clone_source(self.configuration.builder_url, temp_path)
                 builder_executable = self.builder_builder.build(temp_path)
                 self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
 
