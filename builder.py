@@ -134,8 +134,8 @@ class TrustManager:
         parsed = urlparse(url)
         return parsed.netloc.lower()
 
-    def _save_trusted_urls(self, urls: list[str]) -> None:
-        """Save trusted URLs to configuration file."""
+    def _save_user_trusted_urls(self, urls: list[str]) -> None:
+        """Save user-added trusted URLs to configuration file."""
         # Ensure config directory exists when we need to save
         self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
@@ -143,12 +143,11 @@ class TrustManager:
             f.write("# Trusted URLs for builder script\n")
             f.write("# One URL per line\n")
             for url in urls:
-                if url not in self.builtin_trusted_urls:
-                    f.write(f"{url}\n")
+                f.write(f"{url}\n")
 
-    def all_trusted_urls(self) -> list[str]:
-        """Get all trusted URLs (builtin and user-added)."""
-        trusted_urls = self.builtin_trusted_urls.copy()
+    def _get_user_trusted_urls(self) -> list[str]:
+        """Get user-added trusted URLs from configuration file."""
+        user_urls = []
 
         if self.trusted_urls_file.exists():
             try:
@@ -156,23 +155,24 @@ class TrustManager:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith('#'):
-                            trusted_urls.append(line)
+                            user_urls.append(line)
             except Exception as e:
                 print(f"Warning: Error reading trusted URLs file: {e}", file=sys.stderr)
 
-        return trusted_urls
+        return user_urls
+
+    def all_trusted_urls(self) -> list[str]:
+        """Get all trusted URLs (builtin and user-added)."""
+        return self.builtin_trusted_urls + self._get_user_trusted_urls()
 
     def add_trusted_url(self, url: str) -> bool:
         """Add a URL to the trusted list."""
-        trusted_urls = self.all_trusted_urls()
-
-        if url in trusted_urls:
+        if self.is_url_trusted(url):
             return False
 
-        # Only save user-added URLs (not built-in ones)
-        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls]
+        user_urls = self._get_user_trusted_urls()
         user_urls.append(url)
-        self._save_trusted_urls(user_urls)
+        self._save_user_trusted_urls(user_urls)
         return True
 
     def remove_trusted_url(self, url: str) -> bool:
@@ -181,14 +181,13 @@ class TrustManager:
             print(f"Cannot remove built-in trusted URL: {url}", file=sys.stderr)
             return False
 
-        trusted_urls = self.all_trusted_urls()
-
-        if url not in trusted_urls:
+        user_urls = self._get_user_trusted_urls()
+        if url not in user_urls:
             return False
 
-        # Only save user-added URLs (not built-in ones)
-        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls and u != url]
-        self._save_trusted_urls(user_urls)
+        # Remove from user URLs and save
+        user_urls.remove(url)
+        self._save_user_trusted_urls(user_urls)
         return True
 
     def is_url_trusted(self, url: str) -> bool:
