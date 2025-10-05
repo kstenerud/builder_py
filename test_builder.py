@@ -284,76 +284,76 @@ class TestSourceFetcher(unittest.TestCase):
 
     def test_download_and_extract_archive_zip(self) -> None:
         """Test archive format detection for ZIP files through public interface."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
 
         # Mock the private _download_and_extract_archive method
-        with patch.object(source_manager, '_download_and_extract_archive') as mock_download:
+        with patch.object(source_fetcher, '_download_and_extract_archive') as mock_download:
             url = "https://example.com/test.zip"
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
-            source_manager.clone_source(url, target_dir)
+            source_fetcher.clone_source(url, target_dir)
             mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_tar_gz(self) -> None:
         """Test archive format detection for TAR.GZ files through public interface."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
 
         # Mock the private _download_and_extract_archive method
-        with patch.object(source_manager, '_download_and_extract_archive') as mock_download:
+        with patch.object(source_fetcher, '_download_and_extract_archive') as mock_download:
             url = "https://example.com/test.tar.gz"
             target_dir = self.temp_path / "test"
             target_dir.mkdir()
 
-            source_manager.clone_source(url, target_dir)
+            source_fetcher.clone_source(url, target_dir)
             mock_download.assert_called_once_with(url, target_dir)
 
     def test_download_and_extract_archive_unsupported(self) -> None:
         """Test archive format detection for unsupported formats through public interface."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
         with self.assertRaises(RuntimeError) as cm:
-            source_manager.clone_source("https://example.com/test.rar", target_dir)
+            source_fetcher.clone_source("https://example.com/test.rar", target_dir)
 
         self.assertIn("Unsupported archive format", str(cm.exception))
 
     def test_parse_git_url_with_reference(self) -> None:
         """Test parsing Git URLs with references."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
 
-        git_url, ref = source_manager._parse_git_url("https://github.com/user/repo.git#main")
+        git_url, ref = source_fetcher._parse_git_url("https://github.com/user/repo.git#main")
         self.assertEqual(git_url, "https://github.com/user/repo.git")
         self.assertEqual(ref, "main")
 
-        git_url, ref = source_manager._parse_git_url("https://github.com/user/repo.git#v1.0.0")
+        git_url, ref = source_fetcher._parse_git_url("https://github.com/user/repo.git#v1.0.0")
         self.assertEqual(git_url, "https://github.com/user/repo.git")
         self.assertEqual(ref, "v1.0.0")
 
-        git_url, ref = source_manager._parse_git_url("https://github.com/user/repo.git#abc123")
+        git_url, ref = source_fetcher._parse_git_url("https://github.com/user/repo.git#abc123")
         self.assertEqual(git_url, "https://github.com/user/repo.git")
         self.assertEqual(ref, "abc123")
 
     def test_parse_git_url_without_reference(self) -> None:
         """Test parsing Git URLs without references."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
 
-        git_url, ref = source_manager._parse_git_url("https://github.com/user/repo.git")
+        git_url, ref = source_fetcher._parse_git_url("https://github.com/user/repo.git")
         self.assertEqual(git_url, "https://github.com/user/repo.git")
         self.assertIsNone(ref)
 
     @patch('subprocess.run')
     def test_clone_and_checkout_git_with_reference(self, mock_run: Mock) -> None:
         """Test Git cloning with specific reference through public interface."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
         mock_run.return_value.returncode = 0
 
         url = "https://github.com/user/repo.git#v1.0.0"
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        source_manager.clone_source(url, target_dir)
+        source_fetcher.clone_source(url, target_dir)
 
         # Should call git clone and checkout
         self.assertEqual(mock_run.call_count, 2)
@@ -361,7 +361,7 @@ class TestSourceFetcher(unittest.TestCase):
     @patch('subprocess.run')
     def test_clone_and_checkout_git_default_branch_main(self, mock_run: Mock) -> None:
         """Test Git cloning falls back to main branch through public interface."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
 
         # First call (clone) succeeds, second call (checkout main) succeeds
         mock_run.side_effect = [
@@ -373,7 +373,7 @@ class TestSourceFetcher(unittest.TestCase):
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        source_manager.clone_source(url, target_dir)
+        source_fetcher.clone_source(url, target_dir)
 
         # Should try main branch
         self.assertEqual(mock_run.call_count, 2)
@@ -381,22 +381,22 @@ class TestSourceFetcher(unittest.TestCase):
 
     def test_clone_source_archive_url(self) -> None:
         """Test source download dispatcher chooses archive extraction for non-Git URLs."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        with patch.object(source_manager, '_download_and_extract_archive_by_extension') as mock_archive:
-            source_manager.clone_source("https://example.com/project.zip", target_dir)
+        with patch.object(source_fetcher, '_download_and_extract_archive_by_extension') as mock_archive:
+            source_fetcher.clone_source("https://example.com/project.zip", target_dir)
             mock_archive.assert_called_once_with("https://example.com/project.zip", target_dir)
 
     def test_clone_source_git_url(self) -> None:
         """Test source download dispatcher chooses Git clone for .git URLs."""
-        source_manager = SourceFetcher()
+        source_fetcher = SourceFetcher()
         target_dir = self.temp_path / "test"
         target_dir.mkdir()
 
-        with patch.object(source_manager, '_clone_and_checkout_git') as mock_git:
-            source_manager.clone_source("https://github.com/user/repo.git", target_dir)
+        with patch.object(source_fetcher, '_clone_and_checkout_git') as mock_git:
+            source_fetcher.clone_source("https://github.com/user/repo.git", target_dir)
             mock_git.assert_called_once_with("https://github.com/user/repo.git", target_dir)
 
 
@@ -415,21 +415,21 @@ class TestBuilderBuilder(unittest.TestCase):
 
     def test_build_no_cargo_toml(self) -> None:
         """Test build failure when no Rust project is found."""
-        build_manager = BuilderBuilder()
+        builder = BuilderBuilder()
 
         # Create source directory with no Cargo.toml
         source_dir = self.temp_path / "source"
         source_dir.mkdir()
 
         with self.assertRaises(RuntimeError) as cm:
-            build_manager.build(source_dir)
+            builder.build(source_dir)
 
         self.assertIn("No Rust project (Cargo.toml) found", str(cm.exception))
 
     @patch('subprocess.run')
     def test_build_success(self, mock_run: Mock) -> None:
         """Test successful Rust project build."""
-        build_manager = BuilderBuilder()
+        builder = BuilderBuilder()
         mock_run.return_value.returncode = 0
 
         # Create source directory with Rust project
@@ -448,13 +448,13 @@ class TestBuilderBuilder(unittest.TestCase):
         builder_exe = target_dir / "builder"
         builder_exe.write_text("mock executable")
 
-        result = build_manager.build(source_dir)
+        result = builder.build(source_dir)
         self.assertEqual(result, builder_exe)
 
     @patch('subprocess.run')
     def test_build_failure(self, mock_run: Mock) -> None:
         """Test Rust project build failure."""
-        build_manager = BuilderBuilder()
+        builder = BuilderBuilder()
         mock_run.return_value.returncode = 1
         mock_run.return_value.stderr = "Build failed"
 
@@ -469,7 +469,7 @@ class TestBuilderBuilder(unittest.TestCase):
         cargo_toml.write_text("[package]\nname = \"builder\"\nversion = \"0.1.0\"")
 
         with self.assertRaises(RuntimeError):
-            build_manager.build(source_dir)
+            builder.build(source_dir)
 
 
 class TestCacheManager(unittest.TestCase):
@@ -603,53 +603,53 @@ class TestBuilderRunnerIntegration(unittest.TestCase):
     def test_ensure_cache_directories(self) -> None:
         """Test that cache directories are created automatically."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderRunner()
+            runner = BuilderRunner()
 
         # Directories should be created automatically during manager initialization
-        self.assertTrue(manager.path_builder.get_cache_dir().exists())
-        self.assertTrue(manager.path_builder.get_executables_dir().exists())
+        self.assertTrue(runner.path_builder.get_cache_dir().exists())
+        self.assertTrue(runner.path_builder.get_executables_dir().exists())
 
     def test_load_project_config(self) -> None:
         """Test loading project configuration."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderRunner()
+            runner = BuilderRunner()
 
-        url = manager.configuration.builder_url
+        url = runner.configuration.builder_url
         self.assertEqual(url, 'https://github.com/kstenerud/builder-test.git')
 
     def test_get_builder_executable_path(self) -> None:
         """Test getting builder executable path."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderRunner()
+            runner = BuilderRunner()
 
-        path = manager.path_builder.get_builder_executable_path_for_url(manager.configuration.builder_url)
+        path = runner.path_builder.get_builder_executable_path_for_url(runner.configuration.builder_url)
         self.assertTrue(str(path).endswith('builder'))
 
     def test_is_builder_cached(self) -> None:
         """Test checking if builder is cached through CacheManager."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderRunner()
+            runner = BuilderRunner()
 
         # Remove any existing cached executable to ensure clean state
-        exe_path = manager.path_builder.get_builder_executable_path_for_url(manager.configuration.builder_url)
+        exe_path = runner.path_builder.get_builder_executable_path_for_url(runner.configuration.builder_url)
         if exe_path.exists():
             exe_path.unlink()
 
         # Initially not cached
-        self.assertFalse(manager.cache_manager.is_builder_cached(manager.configuration.builder_url))
+        self.assertFalse(runner.cache_manager.is_builder_cached(runner.configuration.builder_url))
 
     @patch('builder.subprocess.run')
     def test_run_with_trust_validation(self, mock_run: Mock) -> None:
         """Test running builder with trust validation through public interface."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderRunner()
+            runner = BuilderRunner()
 
         # Should not raise since the URL is in builtin trusted URLs
         # This is an integration test, so we won't mock everything
         try:
             # This will fail due to network/build, but trust validation should pass
             # Testing through public interface instead of private ensure_builder_available
-            manager.run(['--version'])
+            runner.run(['--version'])
         except Exception:
             # We expect this to fail at build stage, but trust validation should have passed
             pass

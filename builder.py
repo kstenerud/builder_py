@@ -770,7 +770,7 @@ class BuilderRunner:
 def main() -> int:
     """Main entry point for the builder script.
 
-    Handles command-line arguments and delegates to appropriate BuilderManager methods.
+    Handles command-line arguments and delegates to appropriate BuilderRunner methods.
     Supports trust management, cache operations, and project building.
 
     Returns:
@@ -779,17 +779,17 @@ def main() -> int:
     if len(sys.argv) < 2:
         # No arguments, pass to builder
         try:
-            manager = BuilderRunner()
-            return manager.run([])
+            runner = BuilderRunner()
+            return runner.run([])
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
     command = sys.argv[1]
-    manager = BuilderRunner()
+    runner = BuilderRunner()
 
     # Try to handle special commands first
-    result = manager.command_processor.dispatch_command(command, sys.argv)
+    result = runner.command_processor.dispatch_command(command, sys.argv)
     if result is not None:
         return result
 
@@ -805,7 +805,7 @@ def main() -> int:
         args, unknown_args = parser.parse_known_args()
         all_args = unknown_args if unknown_args else sys.argv[1:]
 
-        return manager.run(all_args)
+        return runner.run(all_args)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
