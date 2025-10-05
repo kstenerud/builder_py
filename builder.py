@@ -523,17 +523,17 @@ class SourceFetcher:
 class BuilderBuilder:
     """Builds the builder executable from Rust project source."""
 
-    def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
+    def _find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
         for root, dirs, files in os.walk(search_dir):
             if 'Cargo.toml' in files:
                 return Path(root)
         return None
 
-    def build_rust_project(self, source_dir: Path) -> Path:
+    def build(self, source_dir: Path) -> Path:
         """Find Rust project root in source directory, build it, and return the executable path."""
         # Find the Rust project root
-        rust_project_root = self.find_rust_project_root(source_dir)
+        rust_project_root = self._find_rust_project_root(source_dir)
         if not rust_project_root:
             raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
 
@@ -601,7 +601,7 @@ class CommandProcessor:
             # This should never happen due to regex, but just in case
             raise ValueError(f"Unsupported time unit: {unit}")
 
-    def handle_trust_yes_command(self, args: list[str]) -> int:
+    def _handle_trust_yes_command(self, args: list[str]) -> int:
         """Handle --trust-yes command."""
         if len(args) < 3:
             self._print_error("--trust-yes requires a URL parameter")
@@ -618,7 +618,7 @@ class CommandProcessor:
             self._print_error(f"adding trusted URL: {e}")
             return 1
 
-    def handle_trust_no_command(self, args: list[str]) -> int:
+    def _handle_trust_no_command(self, args: list[str]) -> int:
         """Handle --trust-no command."""
         if len(args) < 3:
             self._print_error("--trust-no requires a URL parameter")
@@ -635,7 +635,7 @@ class CommandProcessor:
             self._print_error(f"removing trusted URL: {e}")
             return 1
 
-    def handle_trust_list_command(self) -> int:
+    def _handle_trust_list_command(self) -> int:
         """Handle --trust-list command."""
         try:
             trusted_urls = self.trust_manager.all_trusted_urls()
@@ -648,7 +648,7 @@ class CommandProcessor:
             self._print_error(f"listing trusted URLs: {e}")
             return 1
 
-    def handle_cache_prune_older_command(self, args: list[str]) -> int:
+    def _handle_cache_prune_older_command(self, args: list[str]) -> int:
         """Handle --cache-prune-older-than command (removes entries older than or equal to specified age)."""
         if len(args) < 3:
             self._print_error("--cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)")
@@ -666,7 +666,7 @@ class CommandProcessor:
             self._print_error(f"during cache pruning: {e}")
             return 1
 
-    def handle_cache_prune_builder_command(self, args: list[str]) -> int:
+    def _handle_cache_prune_builder_command(self, args: list[str]) -> int:
         """Handle --cache-prune-builder command."""
         url = args[2] if len(args) >= 3 else None
         try:
@@ -682,7 +682,7 @@ class CommandProcessor:
             self._print_error(f"during builder cache pruning: {e}")
             return 1
 
-    def handle_cache_help_command(self) -> int:
+    def _handle_cache_help_command(self) -> int:
         """Handle --cache-help command."""
         print("Cache Management:")
         print("  --cache-prune-older-than <time>  Remove cached builders older than or equal to specified time")
@@ -711,12 +711,12 @@ class CommandProcessor:
     def dispatch_command(self, command: str, args: list[str]) -> Optional[int]:
         """Dispatch command to appropriate handler. Returns None if command not handled."""
         command_handlers = {
-            "--trust-yes": self.handle_trust_yes_command,
-            "--trust-no": self.handle_trust_no_command,
-            "--trust-list": lambda args: self.handle_trust_list_command(),
-            "--cache-prune-older-than": self.handle_cache_prune_older_command,
-            "--cache-prune-builder": self.handle_cache_prune_builder_command,
-            "--cache-help": lambda args: self.handle_cache_help_command(),
+            "--trust-yes": self._handle_trust_yes_command,
+            "--trust-no": self._handle_trust_no_command,
+            "--trust-list": lambda args: self._handle_trust_list_command(),
+            "--cache-prune-older-than": self._handle_cache_prune_older_command,
+            "--cache-prune-builder": self._handle_cache_prune_builder_command,
+            "--cache-help": lambda args: self._handle_cache_help_command(),
         }
 
         if command in command_handlers:
@@ -744,7 +744,7 @@ class BuilderManager:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
                 self.source_fetcher.download_or_clone_source(self.configuration.builder_url, temp_path)
-                builder_executable = self.builder_builder.build_rust_project(temp_path)
+                builder_executable = self.builder_builder.build(temp_path)
                 self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
 
     def run_builder(self, args: list[str]) -> int:

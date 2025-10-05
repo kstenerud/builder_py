@@ -413,25 +413,21 @@ class TestBuilderBuilder(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir)
 
-    def test_find_rust_project_root(self) -> None:
-        """Test finding Rust project root."""
+    def test_build_no_cargo_toml(self) -> None:
+        """Test build failure when no Rust project is found."""
         build_manager = BuilderBuilder()
 
-        # Create a Cargo.toml file
-        cargo_file = self.temp_path / "Cargo.toml"
-        cargo_file.write_text("[package]\nname = 'test'\n")
+        # Create source directory with no Cargo.toml
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
 
-        found_root = build_manager.find_rust_project_root(self.temp_path)
-        self.assertEqual(found_root, self.temp_path)
+        with self.assertRaises(RuntimeError) as cm:
+            build_manager.build(source_dir)
 
-        # Test non-existent project
-        empty_dir = self.temp_path / "empty"
-        empty_dir.mkdir()
-        found_root = build_manager.find_rust_project_root(empty_dir)
-        self.assertIsNone(found_root)
+        self.assertIn("No Rust project (Cargo.toml) found", str(cm.exception))
 
     @patch('subprocess.run')
-    def test_build_rust_project_success(self, mock_run: Mock) -> None:
+    def test_build_success(self, mock_run: Mock) -> None:
         """Test successful Rust project build."""
         build_manager = BuilderBuilder()
         mock_run.return_value.returncode = 0
@@ -452,11 +448,11 @@ class TestBuilderBuilder(unittest.TestCase):
         builder_exe = target_dir / "builder"
         builder_exe.write_text("mock executable")
 
-        result = build_manager.build_rust_project(source_dir)
+        result = build_manager.build(source_dir)
         self.assertEqual(result, builder_exe)
 
     @patch('subprocess.run')
-    def test_build_rust_project_failure(self, mock_run: Mock) -> None:
+    def test_build_failure(self, mock_run: Mock) -> None:
         """Test Rust project build failure."""
         build_manager = BuilderBuilder()
         mock_run.return_value.returncode = 1
@@ -473,7 +469,7 @@ class TestBuilderBuilder(unittest.TestCase):
         cargo_toml.write_text("[package]\nname = \"builder\"\nversion = \"0.1.0\"")
 
         with self.assertRaises(RuntimeError):
-            build_manager.build_rust_project(source_dir)
+            build_manager.build(source_dir)
 
 
 class TestCacheManager(unittest.TestCase):
