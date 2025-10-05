@@ -67,10 +67,21 @@ The script supports downloading from multiple source types:
 - **Git URLs** (ending in `.git`): Clone Git repositories directly
 - **Git URLs with references** (`.git#<reference>`): Clone and checkout specific branches, tags, or commits
 
+### Local Files
+
+- **File URLs** (`file://`): Reference local files or directories
+- **Absolute paths**: Direct filesystem paths (`/path/to/project`)
+- **Relative paths**: Paths relative to current directory (`./project`, `../project`)
+
+**File URL Behavior**:
+- **Archive files**: Automatically extract `.zip`, `.tar.gz`, or `.tgz` files
+- **Directories**: Copy the entire directory structure
+- **No Git references**: File URLs don't support `#branch` or `#tag` syntax
+
 Example URLs:
 
 ```yaml
-# Archive formats
+# Remote archive formats
 builder_binary: "https://example.com/project.zip"
 builder_binary: "https://example.com/project.tar.gz"
 builder_binary: "https://example.com/project.tgz"
@@ -78,6 +89,16 @@ builder_binary: "https://example.com/project.tgz"
 # Git repositories
 builder_binary: "https://github.com/user/project.git"
 builder_binary: "https://github.com/user/project.git#main"
+builder_binary: "https://github.com/user/project.git#v1.0.0"
+builder_binary: "https://github.com/user/project.git#abc123def"
+
+# Local files and directories
+builder_binary: "file:///absolute/path/to/project"
+builder_binary: "file:///absolute/path/to/project.zip"
+builder_binary: "/absolute/path/to/project"
+builder_binary: "./relative/path/to/project"
+builder_binary: "../relative/path/to/archive.tar.gz"
+```
 builder_binary: "https://github.com/user/project.git#v1.0.0"
 builder_binary: "https://github.com/user/project.git#abc123def"
 ```

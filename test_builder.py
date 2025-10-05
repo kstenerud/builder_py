@@ -5,6 +5,7 @@ Unit tests for the builder.py script.
 
 import os
 import tempfile
+import tarfile
 import unittest
 import zipfile
 from datetime import datetime, timedelta
@@ -601,6 +602,224 @@ class TestBuilderManager(unittest.TestCase):
         # Don't create cache directories
         removed = manager.prune_cache(timedelta(hours=1))
         self.assertEqual(removed, 0)
+
+    def test_copy_and_extract_file_archive_zip(self) -> None:
+        """Test extracting local ZIP archive."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create a test zip file
+        test_dir = self.temp_path / "test_content"
+        test_dir.mkdir()
+        test_file = test_dir / "test.txt"
+        test_file.write_text("Hello, World!")
+
+        zip_path = self.temp_path / "test.zip"
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            zipf.write(test_file, "test.txt")
+
+        # Extract to target directory
+        target_dir = self.temp_path / "extracted"
+        target_dir.mkdir()
+
+        manager.copy_and_extract_file_archive(str(zip_path), target_dir)
+
+        # Verify extraction
+        extracted_file = target_dir / "test.txt"
+        self.assertTrue(extracted_file.exists())
+        self.assertEqual(extracted_file.read_text(), "Hello, World!")
+
+    def test_copy_and_extract_file_archive_tar_gz(self) -> None:
+        """Test extracting local tar.gz archive."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create a test tar.gz file
+        test_dir = self.temp_path / "test_content"
+        test_dir.mkdir()
+        test_file = test_dir / "test.txt"
+        test_file.write_text("Hello, tar.gz!")
+
+        tar_path = self.temp_path / "test.tar.gz"
+        with tarfile.open(tar_path, 'w:gz') as tarf:
+            tarf.add(test_file, arcname="test.txt")
+
+        # Extract to target directory
+        target_dir = self.temp_path / "extracted"
+        target_dir.mkdir()
+
+        manager.copy_and_extract_file_archive(str(tar_path), target_dir)
+
+        # Verify extraction
+        extracted_file = target_dir / "test.txt"
+        self.assertTrue(extracted_file.exists())
+        self.assertEqual(extracted_file.read_text(), "Hello, tar.gz!")
+
+    def test_copy_and_extract_file_archive_nonexistent(self) -> None:
+        """Test error handling for nonexistent archive file."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        target_dir = self.temp_path / "extracted"
+        target_dir.mkdir()
+
+        with self.assertRaises(FileNotFoundError):
+            manager.copy_and_extract_file_archive("/nonexistent/file.zip", target_dir)
+
+    def test_copy_and_extract_file_archive_unsupported_format(self) -> None:
+        """Test error handling for unsupported archive format."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create a file with unsupported extension
+        test_file = self.temp_path / "test.rar"
+        test_file.write_text("fake rar file")
+
+        target_dir = self.temp_path / "extracted"
+        target_dir.mkdir()
+
+        with self.assertRaises(RuntimeError) as cm:
+            manager.copy_and_extract_file_archive(str(test_file), target_dir)
+
+        self.assertIn("Unsupported local archive format", str(cm.exception))
+
+    def test_copy_file_directory(self) -> None:
+        """Test copying local directory."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create source directory with files
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
+
+        # Create some test files
+        (source_dir / "file1.txt").write_text("Content 1")
+        (source_dir / "file2.txt").write_text("Content 2")
+
+        # Create subdirectory
+        sub_dir = source_dir / "subdir"
+        sub_dir.mkdir()
+        (sub_dir / "file3.txt").write_text("Content 3")
+
+        # Copy to target directory
+        target_dir = self.temp_path / "target"
+
+        manager.copy_file_directory(str(source_dir), target_dir)
+
+        # Verify copy
+        self.assertTrue(target_dir.exists())
+        self.assertTrue((target_dir / "file1.txt").exists())
+        self.assertTrue((target_dir / "file2.txt").exists())
+        self.assertTrue((target_dir / "subdir" / "file3.txt").exists())
+
+        self.assertEqual((target_dir / "file1.txt").read_text(), "Content 1")
+        self.assertEqual((target_dir / "file2.txt").read_text(), "Content 2")
+        self.assertEqual((target_dir / "subdir" / "file3.txt").read_text(), "Content 3")
+
+    def test_copy_file_directory_nonexistent(self) -> None:
+        """Test error handling for nonexistent directory."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        target_dir = self.temp_path / "target"
+
+        with self.assertRaises(FileNotFoundError):
+            manager.copy_file_directory("/nonexistent/directory", target_dir)
+
+    def test_handle_file_url_archive(self) -> None:
+        """Test handling file URL pointing to archive."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create a test zip file
+        test_dir = self.temp_path / "test_content"
+        test_dir.mkdir()
+        test_file = test_dir / "test.txt"
+        test_file.write_text("Hello from archive!")
+
+        zip_path = self.temp_path / "test.zip"
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            zipf.write(test_file, "test.txt")
+
+        target_dir = self.temp_path / "target"
+        target_dir.mkdir()
+
+        manager._handle_file_url(str(zip_path), target_dir)
+
+        # Verify extraction
+        extracted_file = target_dir / "test.txt"
+        self.assertTrue(extracted_file.exists())
+        self.assertEqual(extracted_file.read_text(), "Hello from archive!")
+
+    def test_handle_file_url_directory(self) -> None:
+        """Test handling file URL pointing to directory."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create source directory
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
+        (source_dir / "file.txt").write_text("Hello from directory!")
+
+        target_dir = self.temp_path / "target"
+
+        manager._handle_file_url(str(source_dir), target_dir)
+
+        # Verify copy
+        copied_file = target_dir / "file.txt"
+        self.assertTrue(copied_file.exists())
+        self.assertEqual(copied_file.read_text(), "Hello from directory!")
+
+    def test_download_or_clone_source_file_url(self) -> None:
+        """Test source dispatcher with file:// URL."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create source directory
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
+        (source_dir / "test.txt").write_text("Test content")
+
+        target_dir = self.temp_path / "target"
+
+        # Test file:// URL
+        file_url = f"file://{source_dir}"
+        manager.download_or_clone_source(file_url, target_dir)
+
+        # Verify copy
+        copied_file = target_dir / "test.txt"
+        self.assertTrue(copied_file.exists())
+        self.assertEqual(copied_file.read_text(), "Test content")
+
+    def test_download_or_clone_source_local_path(self) -> None:
+        """Test source dispatcher with local file path."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create source directory
+        source_dir = self.temp_path / "source"
+        source_dir.mkdir()
+        (source_dir / "test.txt").write_text("Local content")
+
+        target_dir = self.temp_path / "target"
+
+        # Test absolute path
+        manager.download_or_clone_source(str(source_dir), target_dir)
+
+        # Verify copy
+        copied_file = target_dir / "test.txt"
+        self.assertTrue(copied_file.exists())
+        self.assertEqual(copied_file.read_text(), "Local content")
 
 
 if __name__ == '__main__':

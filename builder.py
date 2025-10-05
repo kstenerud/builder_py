@@ -219,6 +219,42 @@ class BuilderManager:
             finally:
                 os.unlink(temp_file.name)
 
+    def copy_and_extract_file_archive(self, file_path: str, extract_dir: Path) -> None:
+        """Copy and extract a local archive file."""
+        source_path = Path(file_path)
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"Archive file not found: {file_path}")
+
+        if not source_path.is_file():
+            raise ValueError(f"Path is not a file: {file_path}")
+
+        print(f"Extracting local archive: {file_path}")
+
+        if file_path.endswith('.zip'):
+            with zipfile.ZipFile(source_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+        elif file_path.endswith('.tar.gz') or file_path.endswith('.tgz'):
+            with tarfile.open(source_path, 'r:gz') as tar_ref:
+                tar_ref.extractall(extract_dir)
+        else:
+            raise RuntimeError(f"Unsupported local archive format: {file_path}. Supported formats: .zip, .tar.gz, .tgz")
+
+    def copy_file_directory(self, file_path: str, target_dir: Path) -> None:
+        """Copy a local directory to the target location."""
+        source_path = Path(file_path)
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"Directory not found: {file_path}")
+
+        if not source_path.is_dir():
+            raise ValueError(f"Path is not a directory: {file_path}")
+
+        print(f"Copying local directory: {file_path}")
+
+        # Copy the entire directory tree
+        shutil.copytree(source_path, target_dir, dirs_exist_ok=True)
+
     def clone_and_checkout_git(self, url: str, clone_dir: Path) -> None:
         """Clone a Git repository and checkout the specified reference."""
         git_url, reference = self._parse_git_url(url)
@@ -280,14 +316,37 @@ class BuilderManager:
             raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: .zip, .tar.gz, .tgz")
 
     def download_or_clone_source(self, url: str, target_dir: Path) -> None:
-        """Download archive or clone Git repository based on URL format."""
+        """Download archive, clone Git repository, or copy local files based on URL format."""
+        # Check if it's a file URL
+        if url.startswith('file://'):
+            file_path = url[7:]  # Remove 'file://' prefix
+            self._handle_file_url(file_path, target_dir)
+        # Check if it's a local file path (absolute or relative)
+        elif url.startswith('/') or url.startswith('./') or url.startswith('../') or (len(url) > 1 and url[1] == ':'):  # Windows drive letters
+            self._handle_file_url(url, target_dir)
         # Check if it's a Git URL (ends with .git, potentially followed by #reference)
-        git_url, _ = self._parse_git_url(url)
-        if git_url.endswith('.git'):
-            self.clone_and_checkout_git(url, target_dir)
         else:
-            # It's an archive URL
-            self.download_and_extract_archive(url, target_dir)
+            git_url, _ = self._parse_git_url(url)
+            if git_url.endswith('.git'):
+                self.clone_and_checkout_git(url, target_dir)
+            else:
+                # It's a remote archive URL
+                self.download_and_extract_archive(url, target_dir)
+
+    def _handle_file_url(self, file_path: str, target_dir: Path) -> None:
+        """Handle file-based URLs (local files or directories)."""
+        source_path = Path(file_path)
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"File or directory not found: {file_path}")
+
+        # Check if it's an archive file
+        if source_path.is_file() and (file_path.endswith('.zip') or file_path.endswith('.tar.gz') or file_path.endswith('.tgz')):
+            self.copy_and_extract_file_archive(file_path, target_dir)
+        elif source_path.is_dir():
+            self.copy_file_directory(file_path, target_dir)
+        else:
+            raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive (.zip, .tar.gz, .tgz)")
 
     def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
