@@ -982,6 +982,208 @@ fn main() {
                     arcname = file_path.relative_to(self.temp_path)
                     zipf.write(file_path, arcname)
 
+    def test_extract_domain(self) -> None:
+        """Test URL domain extraction."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        test_cases = [
+            ("https://github.com/user/repo.git", "github.com"),
+            ("http://example.com/path", "example.com"),
+            ("https://subdomain.example.com/", "subdomain.example.com"),
+            ("https://GITHUB.COM/User/Repo.git", "github.com"),  # Case insensitive
+            ("file:///local/path", ""),
+        ]
+
+        for url, expected_domain in test_cases:
+            with self.subTest(url=url):
+                domain = manager._extract_domain(url)
+                self.assertEqual(domain, expected_domain)
+
+    def test_load_trusted_urls_builtin_only(self) -> None:
+        """Test loading trusted URLs when only built-in URLs exist."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # No trusted_urls file exists
+        trusted_urls = manager.load_trusted_urls()
+
+        # Should only contain built-in URLs
+        self.assertEqual(trusted_urls, manager.builtin_trusted_urls)
+        self.assertIn("https://github.com/kstenerud/builder-test.git", trusted_urls)
+
+    def test_load_trusted_urls_with_file(self) -> None:
+        """Test loading trusted URLs from file."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create trusted URLs file
+        manager.ensure_cache_directories()
+        with open(manager.trusted_urls_file, 'w') as f:
+            f.write("# Comment line\n")
+            f.write("https://example.com/repo.git\n")
+            f.write("\n")  # Empty line
+            f.write("https://trusted.org/project.git\n")
+
+        trusted_urls = manager.load_trusted_urls()
+
+        # Should contain both built-in and file-based URLs
+        expected_urls = manager.builtin_trusted_urls + [
+            "https://example.com/repo.git",
+            "https://trusted.org/project.git"
+        ]
+        self.assertEqual(sorted(trusted_urls), sorted(expected_urls))
+
+    def test_add_trusted_url_new(self) -> None:
+        """Test adding a new trusted URL."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        new_url = "https://example.com/repo.git"
+
+        # Add new URL
+        result = manager.add_trusted_url(new_url)
+        self.assertTrue(result)
+
+        # Verify it was added
+        trusted_urls = manager.load_trusted_urls()
+        self.assertIn(new_url, trusted_urls)
+
+    def test_add_trusted_url_duplicate(self) -> None:
+        """Test adding a duplicate trusted URL."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Try to add built-in URL
+        builtin_url = manager.builtin_trusted_urls[0]
+        result = manager.add_trusted_url(builtin_url)
+        self.assertFalse(result)  # Should return False for duplicate
+
+    def test_remove_trusted_url_success(self) -> None:
+        """Test removing a trusted URL successfully."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Add a URL first
+        test_url = "https://example.com/repo.git"
+        manager.add_trusted_url(test_url)
+
+        # Verify it exists
+        trusted_urls = manager.load_trusted_urls()
+        self.assertIn(test_url, trusted_urls)
+
+        # Remove it
+        result = manager.remove_trusted_url(test_url)
+        self.assertTrue(result)
+
+        # Verify it was removed
+        trusted_urls = manager.load_trusted_urls()
+        self.assertNotIn(test_url, trusted_urls)
+
+    def test_remove_trusted_url_builtin(self) -> None:
+        """Test that built-in URLs cannot be removed."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        builtin_url = manager.builtin_trusted_urls[0]
+
+        # Try to remove built-in URL
+        result = manager.remove_trusted_url(builtin_url)
+        self.assertFalse(result)  # Should return False
+
+        # Verify it still exists
+        trusted_urls = manager.load_trusted_urls()
+        self.assertIn(builtin_url, trusted_urls)
+
+    def test_remove_trusted_url_not_found(self) -> None:
+        """Test removing a URL that's not in the trusted list."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Try to remove non-existent URL
+        result = manager.remove_trusted_url("https://nonexistent.com/repo.git")
+        self.assertFalse(result)
+
+    def test_is_url_trusted_same_domain(self) -> None:
+        """Test URL trust validation for same domain."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Add a trusted URL
+        manager.add_trusted_url("https://github.com/trusted/repo.git")
+
+        # Test URLs from same domain
+        test_cases = [
+            ("https://github.com/other/project.git", True),  # Same domain
+            ("https://github.com/user/repo", True),          # Same domain, no .git
+            ("https://example.com/repo.git", False),         # Different domain
+            ("https://sub.github.com/repo.git", False),      # Subdomain doesn't match
+        ]
+
+        for url, expected in test_cases:
+            with self.subTest(url=url):
+                result = manager.is_url_trusted(url)
+                self.assertEqual(result, expected)
+
+    def test_is_url_trusted_builtin(self) -> None:
+        """Test URL trust validation for built-in URLs."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Test built-in URL is trusted
+        self.assertTrue(manager.is_url_trusted("https://github.com/kstenerud/builder-test.git"))
+        self.assertTrue(manager.is_url_trusted("https://github.com/kstenerud/other-repo.git"))
+
+    def test_validate_builder_url_trust_success(self) -> None:
+        """Test successful URL trust validation."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Should not raise exception for trusted URL
+        trusted_url = "https://github.com/kstenerud/some-project.git"
+        manager.validate_builder_url_trust(trusted_url)  # Should not raise
+
+    def test_validate_builder_url_trust_failure(self) -> None:
+        """Test URL trust validation failure."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Should raise exception for untrusted URL
+        untrusted_url = "https://malicious.com/evil-repo.git"
+        with self.assertRaises(ValueError) as context:
+            manager.validate_builder_url_trust(untrusted_url)
+
+        self.assertIn("Untrusted URL domain", str(context.exception))
+
+    def test_ensure_builder_available_with_trust_validation(self) -> None:
+        """Test that ensure_builder_available validates trust."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create config with untrusted URL
+        config_content = 'builder_binary: "https://malicious.com/evil.git"\n'
+        config_file = self.temp_path / "builder.yaml"
+        config_file.write_text(config_content)
+
+        # Should raise exception due to untrusted URL
+        with self.assertRaises(ValueError) as context:
+            manager.ensure_builder_available()
+
+        self.assertIn("Untrusted URL domain", str(context.exception))
+
 
 if __name__ == '__main__':
     unittest.main()

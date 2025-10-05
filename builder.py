@@ -18,6 +18,7 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+from urllib.parse import urlparse
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -32,13 +33,21 @@ class BuilderManager:
         self.home_dir = Path.home()
         self.cache_dir = self.home_dir / ".cache" / "builder"
         self.executables_dir = self.cache_dir / "executables"
+        self.config_dir = self.home_dir / ".config" / "builder"
+        self.trusted_urls_file = self.config_dir / "trusted_urls"
         self.project_root = Path.cwd()
         self.config_file = self.project_root / "builder.yaml"
 
+        # Built-in trusted URLs (for testing and default behavior)
+        self.builtin_trusted_urls = [
+            "https://github.com/kstenerud/builder-test.git"
+        ]
+
     def ensure_cache_directories(self) -> None:
-        """Create cache directories if they don't exist."""
+        """Create cache and config directories if they don't exist."""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.executables_dir.mkdir(parents=True, exist_ok=True)
+        self.config_dir.mkdir(parents=True, exist_ok=True)
 
     def load_project_config(self) -> str:
         """Load builder_binary URL from builder.yaml."""
@@ -70,6 +79,135 @@ class BuilderManager:
             raise ValueError("Invalid configuration: 'builder_binary' value is empty")
 
         return builder_url.strip()
+
+    def _extract_domain(self, url: str) -> str:
+        """Extract domain from URL for trust validation.
+
+        Args:
+            url: URL to extract domain from
+
+        Returns:
+            Domain portion of the URL
+        """
+        parsed = urlparse(url)
+        return parsed.netloc.lower()
+
+    def load_trusted_urls(self) -> list[str]:
+        """Load trusted URLs from configuration file.
+
+        Returns:
+            List of trusted URLs (includes both file-based and built-in URLs)
+        """
+        trusted_urls = self.builtin_trusted_urls.copy()
+
+        if self.trusted_urls_file.exists():
+            try:
+                with open(self.trusted_urls_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            trusted_urls.append(line)
+            except Exception as e:
+                print(f"Warning: Error reading trusted URLs file: {e}", file=sys.stderr)
+
+        return trusted_urls
+
+    def save_trusted_urls(self, urls: list[str]) -> None:
+        """Save trusted URLs to configuration file.
+
+        Args:
+            urls: List of URLs to save (excluding built-in URLs)
+        """
+        self.ensure_cache_directories()
+
+        with open(self.trusted_urls_file, 'w') as f:
+            f.write("# Trusted URLs for builder script\n")
+            f.write("# One URL per line\n")
+            for url in urls:
+                if url not in self.builtin_trusted_urls:
+                    f.write(f"{url}\n")
+
+    def add_trusted_url(self, url: str) -> bool:
+        """Add a URL to the trusted list.
+
+        Args:
+            url: URL to add to trusted list
+
+        Returns:
+            True if URL was added, False if it was already trusted
+        """
+        trusted_urls = self.load_trusted_urls()
+
+        if url in trusted_urls:
+            return False
+
+        # Only save user-added URLs (not built-in ones)
+        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls]
+        user_urls.append(url)
+        self.save_trusted_urls(user_urls)
+        return True
+
+    def remove_trusted_url(self, url: str) -> bool:
+        """Remove a URL from the trusted list.
+
+        Args:
+            url: URL to remove from trusted list
+
+        Returns:
+            True if URL was removed, False if it wasn't in the list or is built-in
+        """
+        if url in self.builtin_trusted_urls:
+            print(f"Cannot remove built-in trusted URL: {url}", file=sys.stderr)
+            return False
+
+        trusted_urls = self.load_trusted_urls()
+
+        if url not in trusted_urls:
+            return False
+
+        # Only save user-added URLs (not built-in ones)
+        user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls and u != url]
+        self.save_trusted_urls(user_urls)
+        return True
+
+    def is_url_trusted(self, url: str) -> bool:
+        """Check if a URL is trusted based on domain matching.
+
+        Args:
+            url: URL to check
+
+        Returns:
+            True if URL domain matches a trusted domain
+        """
+        url_domain = self._extract_domain(url)
+        trusted_urls = self.load_trusted_urls()
+
+        for trusted_url in trusted_urls:
+            trusted_domain = self._extract_domain(trusted_url)
+            if url_domain == trusted_domain:
+                return True
+
+        return False
+
+    def validate_builder_url_trust(self, url: str) -> None:
+        """Validate that a builder URL is trusted.
+
+        Args:
+            url: URL to validate
+
+        Raises:
+            ValueError: If URL is not trusted
+        """
+        if not self.is_url_trusted(url):
+            url_domain = self._extract_domain(url)
+            trusted_urls = self.load_trusted_urls()
+            trusted_domains = [self._extract_domain(u) for u in trusted_urls]
+
+            print(f"Error: Untrusted URL domain '{url_domain}'", file=sys.stderr)
+            print(f"URL: {url}", file=sys.stderr)
+            print(f"Trusted domains: {', '.join(sorted(set(trusted_domains)))}", file=sys.stderr)
+            print(f"Use --trust-yes {url} to add this URL to the trusted list", file=sys.stderr)
+            raise ValueError(f"Untrusted URL domain: {url_domain}")
 
     def _parse_time_spec(self, time_spec: str) -> timedelta:
         """Parse a time specification like '5m', '400d', '2h' into a timedelta.
@@ -521,6 +659,11 @@ class BuilderManager:
         """Ensure the builder executable is available, downloading if necessary."""
         self.ensure_cache_directories()
 
+        builder_url = self.load_project_config()
+
+        # Validate that the URL is trusted
+        self.validate_builder_url_trust(builder_url)
+
         if not self.is_builder_cached():
             self.download_and_build_builder()
 
@@ -547,7 +690,56 @@ class BuilderManager:
 
 def main() -> int:
     """Main entry point for the builder script."""
-    # Check for cache management flags first
+    # Check for trust management flags first
+    if len(sys.argv) >= 2:
+        if sys.argv[1] == "--trust-yes":
+            if len(sys.argv) < 3:
+                print("Error: --trust-yes requires a URL parameter", file=sys.stderr)
+                return 1
+
+            url = sys.argv[2]
+            try:
+                manager = BuilderManager()
+                if manager.add_trusted_url(url):
+                    print(f"Added trusted URL: {url}")
+                else:
+                    print(f"URL already trusted: {url}")
+                return 0
+            except Exception as e:
+                print(f"Error adding trusted URL: {e}", file=sys.stderr)
+                return 1
+
+        elif sys.argv[1] == "--trust-no":
+            if len(sys.argv) < 3:
+                print("Error: --trust-no requires a URL parameter", file=sys.stderr)
+                return 1
+
+            url = sys.argv[2]
+            try:
+                manager = BuilderManager()
+                if manager.remove_trusted_url(url):
+                    print(f"Removed trusted URL: {url}")
+                else:
+                    print(f"URL not found in trusted list or is built-in: {url}")
+                return 0
+            except Exception as e:
+                print(f"Error removing trusted URL: {e}", file=sys.stderr)
+                return 1
+
+        elif sys.argv[1] == "--trust-list":
+            try:
+                manager = BuilderManager()
+                trusted_urls = manager.load_trusted_urls()
+                print("Trusted URLs:")
+                for url in sorted(trusted_urls):
+                    marker = " (built-in)" if url in manager.builtin_trusted_urls else ""
+                    print(f"  {url}{marker}")
+                return 0
+            except Exception as e:
+                print(f"Error listing trusted URLs: {e}", file=sys.stderr)
+                return 1
+
+    # Check for cache management flags
     if len(sys.argv) >= 2:
         if sys.argv[1] == "--cache-prune-older-than":
             if len(sys.argv) < 3:
@@ -588,6 +780,11 @@ def main() -> int:
             print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
             print("                                   (uses project's builder_binary if no URL specified)")
             print("")
+            print("Trust Management:")
+            print("  --trust-yes <url>                Add URL to trusted list")
+            print("  --trust-no <url>                 Remove URL from trusted list")
+            print("  --trust-list                     List all trusted URLs")
+            print("")
             print("Time format: <positive_integer><unit>")
             print("  s = seconds, m = minutes, h = hours, d = days")
             print("")
@@ -597,6 +794,9 @@ def main() -> int:
             print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
             print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
             print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
+            print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
+            print("  ./builder.py --trust-no https://example.com/repo.git   # Remove trusted URL")
+            print("  ./builder.py --trust-list                   # List trusted URLs")
             return 0
 
     # Parse arguments - we'll pass everything to the builder executable
