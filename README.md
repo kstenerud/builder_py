@@ -250,7 +250,7 @@ The main `BuilderManager` class handles:
 
 ### Key Methods
 
-- `ensure_builder_available()`: Main orchestration method
+- `_ensure_builder_available()`: Main orchestration method
 - `load_project_config()`: Loads project configuration
 - `download_and_build_builder()`: Downloads and builds from source
 - `run_builder()`: Executes the cached builder with arguments

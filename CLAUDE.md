@@ -48,7 +48,7 @@ BuilderManager (Orchestrator)
 
 #### **BuilderManager** - Main Orchestrator
 - Coordinates all components to fulfill user requests
-- Ensures builder availability through `ensure_builder_available()`
+- Ensures builder availability through `_ensure_builder_available()`
 - Executes builder with `run_builder()`
 - **Key Insight**: This is the only class that orchestrates the full workflow
 
@@ -71,13 +71,13 @@ BuilderManager (Orchestrator)
 
 #### **CacheManager** - Cache Operations
 - Checks cache validity with `is_builder_cached()`
-- Idempotent caching with `cache_builder_executable()`
+- Idempotent caching with `cache_builder()`
 - Age-based cache pruning (using `<= cutoff_time` for inclusive age comparison)
 - Can prune the cache of a specific URL
 - **Key Insight**: All cache operations are idempotent and safe to repeat
 
 #### **SourceFetcher** - Source Code Retrieval
-- **Public API**: Only `download_or_clone_source()` - the unified entry point
+- **Public API**: Only `clone_source()` - the unified entry point
 - **Private Methods**: All implementation details (Git cloning, archive extraction, file copying)
 - Supports: Git repos (with optional references), archives (.zip, .tar.gz, .tgz), local files/directories
 - **Key Insight**: Single public method hides complexity while supporting multiple source types
