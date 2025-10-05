@@ -115,11 +115,47 @@ The script forwards all command-line arguments to the builder executable:
 # Pass any arguments
 ./builder.py arg1 arg2 arg3
 
+# Clean up old cache entries (older than 30 days)
+./builder.py --cache-prune-older-than 30d
+
 # The script will automatically:
 # 1. Check if builder is cached
 # 2. Download and build if needed
 # 3. Execute with your arguments
 ```
+
+## Cache Management
+
+### Cache Pruning
+
+You can clean up old cached builders using the `--cache-prune-older-than` flag:
+
+```bash
+# Remove cache entries older than 5 minutes
+./builder.py --cache-prune-older-than 5m
+
+# Remove cache entries older than 2 hours
+./builder.py --cache-prune-older-than 2h
+
+# Remove cache entries older than 30 days
+./builder.py --cache-prune-older-than 30d
+
+# Remove cache entries older than 400 seconds
+./builder.py --cache-prune-older-than 400s
+```
+
+**Time Format**: `<positive_integer><unit>` where unit is:
+- `s` - seconds
+- `m` - minutes
+- `h` - hours
+- `d` - days
+
+The time units are case-insensitive (`5M` = `5m`).
+
+**File Age Detection**: The script uses the following priority for determining file age:
+1. Access time (when the cached binary was last used)
+2. Modified time (when the file was last changed)
+3. Created time (when the file was first created)
 
 ## Development
 

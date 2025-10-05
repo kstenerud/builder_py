@@ -16,8 +16,10 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -69,6 +71,46 @@ class BuilderManager:
 
         return builder_url.strip()
 
+    def _parse_time_spec(self, time_spec: str) -> timedelta:
+        """Parse a time specification like '5m', '400d', '2h' into a timedelta.
+
+        Args:
+            time_spec: Time specification with format: positive_integer + unit
+                      where unit is one of: s (seconds), m (minutes), h (hours), d (days)
+
+        Returns:
+            timedelta object representing the time duration
+
+        Raises:
+            ValueError: If the time specification is invalid
+        """
+        if not time_spec:
+            raise ValueError("Time specification cannot be empty")
+
+        # Match pattern: positive integer followed by unit (s, m, h, d)
+        match = re.match(r'^(\d+)([smhd])$', time_spec.lower())
+        if not match:
+            raise ValueError(f"Invalid time specification: '{time_spec}'. Expected format: <positive_integer><unit> where unit is s, m, h, or d")
+
+        amount = int(match.group(1))
+        unit = match.group(2)
+
+        if amount <= 0:
+            raise ValueError(f"Time amount must be positive, got: {amount}")
+
+        # Convert to timedelta based on unit
+        if unit == 's':
+            return timedelta(seconds=amount)
+        elif unit == 'm':
+            return timedelta(minutes=amount)
+        elif unit == 'h':
+            return timedelta(hours=amount)
+        elif unit == 'd':
+            return timedelta(days=amount)
+        else:
+            # This should never happen due to regex, but just in case
+            raise ValueError(f"Unsupported time unit: {unit}")
+
     def _parse_git_url(self, url: str) -> Tuple[str, Optional[str]]:
         """Parse a Git URL and extract the base URL and optional reference.
 
@@ -107,6 +149,32 @@ class BuilderManager:
                     result.append(f'^j{code:06X}')
 
         return ''.join(result)
+
+    def _get_file_age(self, file_path: Path) -> datetime:
+        """Get the age of a file, trying access time, then modified time, then created time.
+
+        Args:
+            file_path: Path to the file to check
+
+        Returns:
+            datetime object representing the file's timestamp
+        """
+        stat = file_path.stat()
+
+        # Try access time first (st_atime)
+        if hasattr(stat, 'st_atime') and stat.st_atime > 0:
+            return datetime.fromtimestamp(stat.st_atime)
+
+        # Fall back to modified time (st_mtime)
+        if hasattr(stat, 'st_mtime') and stat.st_mtime > 0:
+            return datetime.fromtimestamp(stat.st_mtime)
+
+        # Fall back to created time (st_ctime)
+        if hasattr(stat, 'st_ctime') and stat.st_ctime > 0:
+            return datetime.fromtimestamp(stat.st_ctime)
+
+        # If all else fails, use current time (shouldn't happen)
+        return datetime.now()
 
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable."""
@@ -284,6 +352,63 @@ class BuilderManager:
             # Cache the executable
             self.cache_builder_executable(builder_executable)
 
+    def prune_cache(self, max_age: timedelta) -> int:
+        """Remove cached builders older than the specified age.
+
+        Args:
+            max_age: Maximum age for cached files (older files will be deleted)
+
+        Returns:
+            Number of cache entries removed
+        """
+        if not self.executables_dir.exists():
+            return 0
+
+        removed_count = 0
+        cutoff_time = datetime.now() - max_age
+
+        print(f"Pruning cache entries older than {max_age}...")
+
+        # Iterate through all cache directories
+        for cache_dir in self.executables_dir.iterdir():
+            if not cache_dir.is_dir():
+                continue
+
+            builder_path = cache_dir / "builder"
+            if not builder_path.exists():
+                continue
+
+            try:
+                file_age = self._get_file_age(builder_path)
+
+                if file_age < cutoff_time:
+                    print(f"Removing old cache entry: {cache_dir.name}")
+                    shutil.rmtree(cache_dir)
+                    removed_count += 1
+                else:
+                    # Calculate human-readable age
+                    age_delta = datetime.now() - file_age
+                    if age_delta.days > 0:
+                        age_str = f"{age_delta.days}d"
+                    elif age_delta.seconds > 3600:
+                        age_str = f"{age_delta.seconds // 3600}h"
+                    elif age_delta.seconds > 60:
+                        age_str = f"{age_delta.seconds // 60}m"
+                    else:
+                        age_str = f"{age_delta.seconds}s"
+                    print(f"Keeping cache entry (age: {age_str}): {cache_dir.name}")
+
+            except Exception as e:
+                print(f"Warning: Could not check age of {cache_dir.name}: {e}")
+                continue
+
+        if removed_count > 0:
+            print(f"Removed {removed_count} cache entries")
+        else:
+            print("No cache entries needed pruning")
+
+        return removed_count
+
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
         self.ensure_cache_directories()
@@ -314,6 +439,40 @@ class BuilderManager:
 
 def main() -> int:
     """Main entry point for the builder script."""
+    # Check for cache pruning flag first
+    if len(sys.argv) >= 2:
+        if sys.argv[1] == "--cache-prune-older-than":
+            if len(sys.argv) < 3:
+                print("Error: --cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)", file=sys.stderr)
+                return 1
+
+            time_spec = sys.argv[2]
+
+            try:
+                manager = BuilderManager()
+                max_age = manager._parse_time_spec(time_spec)
+                removed = manager.prune_cache(max_age)
+                return 0
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            except Exception as e:
+                print(f"Error during cache pruning: {e}", file=sys.stderr)
+                return 1
+
+        elif sys.argv[1] == "--cache-help":
+            print("Cache Management:")
+            print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
+            print("")
+            print("Time format: <positive_integer><unit>")
+            print("  s = seconds, m = minutes, h = hours, d = days")
+            print("")
+            print("Examples:")
+            print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
+            print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
+            print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
+            return 0
+
     # Parse arguments - we'll pass everything to the builder executable
     parser = argparse.ArgumentParser(
         description="Builder script wrapper",

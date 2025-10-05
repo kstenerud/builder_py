@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -465,6 +466,141 @@ class TestBuilderManager(unittest.TestCase):
         with patch.object(manager, 'download_and_extract_archive') as mock_archive:
             manager.download_or_clone_source("https://example.com/project.zip", target_dir)
             mock_archive.assert_called_once_with("https://example.com/project.zip", target_dir)
+
+    def test_parse_time_spec_valid(self) -> None:
+        """Test parsing valid time specifications."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Test seconds
+        delta = manager._parse_time_spec("30s")
+        self.assertEqual(delta.total_seconds(), 30)
+
+        # Test minutes
+        delta = manager._parse_time_spec("5m")
+        self.assertEqual(delta.total_seconds(), 5 * 60)
+
+        # Test hours
+        delta = manager._parse_time_spec("2h")
+        self.assertEqual(delta.total_seconds(), 2 * 3600)
+
+        # Test days
+        delta = manager._parse_time_spec("7d")
+        self.assertEqual(delta.total_seconds(), 7 * 24 * 3600)
+
+        # Test case insensitive
+        delta = manager._parse_time_spec("10M")
+        self.assertEqual(delta.total_seconds(), 10 * 60)
+
+    def test_parse_time_spec_invalid(self) -> None:
+        """Test parsing invalid time specifications."""
+        with patch('builder.Path.cwd', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        invalid_specs = [
+            "",           # Empty
+            "5",          # No unit
+            "m5",         # Unit before number
+            "5x",         # Invalid unit
+            "0s",         # Zero amount (after int conversion)
+            "-5m",        # Negative amount
+            "5.5h",       # Decimal amount
+            "abc",        # Non-numeric
+            "5 m",        # Space in between
+        ]
+
+        for spec in invalid_specs:
+            with self.subTest(spec=spec):
+                with self.assertRaises(ValueError):
+                    manager._parse_time_spec(spec)
+
+    @patch('builder.datetime')
+    def test_prune_cache_removes_old_files(self, mock_datetime: Mock) -> None:
+        """Test cache pruning removes old files."""
+        # Mock current time
+        current_time = datetime(2023, 10, 5, 12, 0, 0)
+        mock_datetime.now.return_value = current_time
+        mock_datetime.fromtimestamp.side_effect = datetime.fromtimestamp
+
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create cache structure
+        manager.ensure_cache_directories()
+
+        # Create old cache entry (6 hours ago)
+        old_cache_dir = manager.executables_dir / "old_entry"
+        old_cache_dir.mkdir(exist_ok=True)
+        old_builder = old_cache_dir / "builder"
+        old_builder.touch()
+
+        # Create recent cache entry (1 hour ago)
+        new_cache_dir = manager.executables_dir / "new_entry"
+        new_cache_dir.mkdir(exist_ok=True)
+        new_builder = new_cache_dir / "builder"
+        new_builder.touch()
+
+        # Mock the _get_file_age method instead of stat
+        def mock_get_file_age(file_path):
+            if 'old_entry' in str(file_path):
+                return current_time - timedelta(hours=6)
+            else:
+                return current_time - timedelta(hours=1)
+
+        with patch.object(manager, '_get_file_age', side_effect=mock_get_file_age):
+            # Prune files older than 2 hours
+            removed = manager.prune_cache(timedelta(hours=2))
+
+        # Should remove 1 old file
+        self.assertEqual(removed, 1)
+        # The old cache directory should be removed
+        self.assertFalse(old_cache_dir.exists())
+        # The new cache directory should still exist
+        self.assertTrue(new_cache_dir.exists())
+
+    @patch('builder.datetime')
+    def test_prune_cache_no_files_to_remove(self, mock_datetime: Mock) -> None:
+        """Test cache pruning when no files need removal."""
+        current_time = datetime(2023, 10, 5, 12, 0, 0)
+        mock_datetime.now.return_value = current_time
+        mock_datetime.fromtimestamp.side_effect = datetime.fromtimestamp
+
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create cache structure
+        manager.ensure_cache_directories()
+
+        # Create recent cache entry (1 hour ago)
+        cache_dir = manager.executables_dir / "recent_entry"
+        cache_dir.mkdir(exist_ok=True)
+        builder = cache_dir / "builder"
+        builder.touch()
+
+        # Mock the _get_file_age method to return recent time
+        def mock_get_file_age(file_path):
+            return current_time - timedelta(minutes=15)  # 15 minutes ago (newer than 30 minute cutoff)
+
+        with patch.object(manager, '_get_file_age', side_effect=mock_get_file_age):
+            # Try to prune files older than 30 minutes
+            removed = manager.prune_cache(timedelta(minutes=30))
+
+        # Should remove 0 files
+        self.assertEqual(removed, 0)
+        # Cache directory should still exist
+        self.assertTrue(cache_dir.exists())
+
+    def test_prune_cache_nonexistent_directory(self) -> None:
+        """Test cache pruning when cache directory doesn't exist."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Don't create cache directories
+        removed = manager.prune_cache(timedelta(hours=1))
+        self.assertEqual(removed, 0)
 
 
 if __name__ == '__main__':
