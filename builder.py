@@ -544,37 +544,33 @@ class CommandProcessor:
             # This should never happen due to regex, but just in case
             raise ValueError(f"Unsupported time unit: {unit}")
 
-    def _handle_trust_yes_command(self, args: list[str]) -> int:
+    def _handle_trust_yes_command(self, args: list[str]) -> None:
         """Handle --trust-yes command."""
         if len(args) < 3:
             self._print_error("--trust-yes requires a URL parameter")
-            return 1
+            return
 
         url = args[2]
         try:
             self.trust_manager.add_trusted_url(url)
             print(f"Added trusted URL: {url}")
-            return 0
         except Exception as e:
             self._print_error(f"adding trusted URL: {e}")
-            return 1
 
-    def _handle_trust_no_command(self, args: list[str]) -> int:
+    def _handle_trust_no_command(self, args: list[str]) -> None:
         """Handle --trust-no command."""
         if len(args) < 3:
             self._print_error("--trust-no requires a URL parameter")
-            return 1
+            return
 
         url = args[2]
         try:
             self.trust_manager.remove_trusted_url(url)
             print(f"Removed trusted URL: {url}")
-            return 0
         except Exception as e:
             self._print_error(f"removing trusted URL: {e}")
-            return 1
 
-    def _handle_trust_list_command(self) -> int:
+    def _handle_trust_list_command(self) -> None:
         """Handle --trust-list command."""
         try:
             trusted_urls = self.trust_manager.all_trusted_urls()
@@ -582,16 +578,14 @@ class CommandProcessor:
             for url in sorted(trusted_urls):
                 marker = " (built-in)" if url in self.trust_manager.builtin_trusted_urls else ""
                 print(f"  {url}{marker}")
-            return 0
         except Exception as e:
             self._print_error(f"listing trusted URLs: {e}")
-            return 1
 
-    def _handle_cache_prune_older_command(self, args: list[str]) -> int:
+    def _handle_cache_prune_older_command(self, args: list[str]) -> None:
         """Handle --cache-prune-older-than command (removes entries older than or equal to specified age)."""
         if len(args) < 3:
             self._print_error("--cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)")
-            return 1
+            return
 
         time_spec = args[2]
         try:
@@ -605,15 +599,12 @@ class CommandProcessor:
                     print(f"  {path.name}")
             else:
                 print("No cache entries found matching the age criteria")
-            return 0
         except ValueError as e:
             self._print_error(str(e))
-            return 1
         except Exception as e:
             self._print_error(f"during cache pruning: {e}")
-            return 1
 
-    def _handle_cache_prune_builder_command(self, args: list[str]) -> int:
+    def _handle_cache_prune_builder_command(self, args: list[str]) -> None:
         """Handle --cache-prune-builder command."""
         url = args[2] if len(args) >= 3 else None
         try:
@@ -631,12 +622,10 @@ class CommandProcessor:
                     print(f"Successfully removed unexpected cache entry: {removed_path.name}")
             else:
                 print(f"No cache entry found for URL: {url}")
-            return 0
         except Exception as e:
             self._print_error(f"during builder cache pruning: {e}")
-            return 1
 
-    def _handle_cache_help_command(self) -> int:
+    def _handle_cache_help_command(self) -> None:
         """Handle --cache-help command."""
         print("Cache Management:")
         print("  --cache-prune-older-than <time>  Remove cached builders older than or equal to specified time")
@@ -660,10 +649,9 @@ class CommandProcessor:
         print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
         print("  ./builder.py --trust-no https://example.com/repo.git   # Remove trusted URL")
         print("  ./builder.py --trust-list                   # List trusted URLs")
-        return 0
 
-    def dispatch_command(self, command: str, args: list[str]) -> Optional[int]:
-        """Dispatch command to appropriate handler. Returns None if command not handled."""
+    def dispatch_command(self, command: str, args: list[str]) -> bool:
+        """Dispatch command to appropriate handler. Returns True if command was handled."""
         command_handlers = {
             "--trust-yes": self._handle_trust_yes_command,
             "--trust-no": self._handle_trust_no_command,
@@ -674,8 +662,9 @@ class CommandProcessor:
         }
 
         if command in command_handlers:
-            return command_handlers[command](args)
-        return None
+            command_handlers[command](args)
+            return True
+        return False
 
 
 class BuilderRunner:
@@ -747,9 +736,8 @@ def main() -> int:
     runner = BuilderRunner()
 
     # Try to handle special commands first
-    result = runner.command_processor.dispatch_command(command, sys.argv)
-    if result is not None:
-        return result
+    if runner.command_processor.dispatch_command(command, sys.argv):
+        return 0
 
     # Default: pass arguments to builder executable
     try:
