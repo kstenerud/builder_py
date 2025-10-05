@@ -45,22 +45,26 @@ class BuilderManager:
         with open(self.config_file, 'r') as f:
             content = f.read()
 
-        # Simple regex to find builder_binary field
-        # Matches: builder_binary: "url" or builder_binary: 'url' or builder_binary: url
-        # First try to match quoted values, then unquoted
-        quoted_pattern = r'^\s*builder_binary\s*:\s*["\']([^"\']+)["\']'
-        unquoted_pattern = r'^\s*builder_binary\s*:\s*([^\s#\n]+)'
-
-        match = re.search(quoted_pattern, content, re.MULTILINE)
-        if not match:
-            match = re.search(unquoted_pattern, content, re.MULTILINE)
+        # Single regex to match builder_binary field with flexible quoting
+        # Pattern breakdown:
+        # ^\s*builder_binary\s*:\s*  - Match key with optional whitespace
+        # (?:                       - Non-capturing group for alternatives:
+        #   ["\']([^"\']*)["\']     -   Group 1: quoted value (single or double quotes)
+        #   |                       -   OR
+        #   ([^\s#\n]+)             -   Group 2: unquoted value (until whitespace/comment/newline)
+        # )
+        pattern = r'^\s*builder_binary\s*:\s*(?:["\']([^"\']*)["\']|([^\s#\n]+))'
+        match = re.search(pattern, content, re.MULTILINE)
 
         if not match:
             raise ValueError("Invalid configuration: 'builder_binary' key not found or invalid format")
 
-        builder_url = match.group(1).strip()
-        if not builder_url:
+        # Extract the URL from whichever group matched (quoted or unquoted)
+        builder_url = match.group(1) if match.group(1) is not None else match.group(2)
+        if not builder_url or not builder_url.strip():
             raise ValueError("Invalid configuration: 'builder_binary' value is empty")
+
+        return builder_url.strip()
 
         return builder_url
 
