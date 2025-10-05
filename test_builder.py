@@ -487,12 +487,12 @@ class TestCacheManager(unittest.TestCase):
         self.assertTrue(self.path_builder.get_executables_dir().exists())
 
     def test_is_builder_cached(self) -> None:
-        """Test checking if builder is cached (private method)."""
+        """Test checking if builder is cached."""
         cache_manager = CacheManager(self.path_builder)
         url = "https://github.com/test/repo.git"
 
         # Initially not cached
-        self.assertFalse(cache_manager._is_builder_cached(url))
+        self.assertFalse(cache_manager.is_builder_cached(url))
 
         # Create cached executable
         exe_path = self.path_builder.get_builder_executable_path_for_url(url)
@@ -500,7 +500,7 @@ class TestCacheManager(unittest.TestCase):
         exe_path.write_text("mock executable")
 
         # Now should be cached
-        self.assertTrue(cache_manager._is_builder_cached(url))
+        self.assertTrue(cache_manager.is_builder_cached(url))
 
     def test_cache_builder_executable(self) -> None:
         """Test caching builder executable with idempotent behavior."""
@@ -512,16 +512,16 @@ class TestCacheManager(unittest.TestCase):
         source_path.write_text("mock executable")
 
         # Initially not cached
-        self.assertFalse(cache_manager._is_builder_cached(url))
+        self.assertFalse(cache_manager.is_builder_cached(url))
 
         cache_manager.cache_builder_executable(source_path, url)
 
         # Verify it was cached
-        self.assertTrue(cache_manager._is_builder_cached(url))
+        self.assertTrue(cache_manager.is_builder_cached(url))
 
         # Test idempotent behavior - calling again should not fail
         cache_manager.cache_builder_executable(source_path, url)
-        self.assertTrue(cache_manager._is_builder_cached(url))
+        self.assertTrue(cache_manager.is_builder_cached(url))
 class TestBuilderManagerIntegration(unittest.TestCase):
     """Integration tests for BuilderManager with real component interactions."""
 
@@ -576,7 +576,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
             exe_path.unlink()
 
         # Initially not cached
-        self.assertFalse(manager.cache_manager._is_builder_cached(manager.configuration.builder_url))
+        self.assertFalse(manager.cache_manager.is_builder_cached(manager.configuration.builder_url))
 
     @patch('builder.subprocess.run')
     def test_ensure_builder_available_with_trust_validation(self, mock_run: Mock) -> None:

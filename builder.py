@@ -234,7 +234,7 @@ class CacheManager:
         self.path_builder.get_cache_dir().mkdir(parents=True, exist_ok=True)
         self.path_builder.get_executables_dir().mkdir(parents=True, exist_ok=True)
 
-    def _is_builder_cached(self, url: str) -> bool:
+    def is_builder_cached(self, url: str) -> bool:
         """Check if builder executable is already cached."""
         builder_path = self.path_builder.get_builder_executable_path_for_url(url)
         return builder_path.exists() and builder_path.is_file()
@@ -242,7 +242,7 @@ class CacheManager:
     def cache_builder_executable(self, source_path: Path, url: str) -> None:
         """Copy the builder executable to the cache (idempotent operation)."""
         # Check if already cached
-        if self._is_builder_cached(url):
+        if self.is_builder_cached(url):
             print(f"Builder already cached for: {url}")
             return
 
@@ -794,7 +794,7 @@ class BuilderManager:
         # Validate that the URL is trusted
         self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
 
-        if not self.cache_manager._is_builder_cached(self.configuration.builder_url):
+        if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
             self.download_and_build_builder()
 
     def run_builder(self, args: list[str]) -> int:
