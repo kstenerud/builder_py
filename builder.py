@@ -45,15 +45,17 @@ class BuilderManager:
         with open(self.config_file, 'r') as f:
             content = f.read()
 
-        # Single regex to match builder_binary field with flexible quoting
+        # Single regex to match builder_binary field with flexible quoting for both key and value
         # Pattern breakdown:
-        # ^\s*builder_binary\s*:\s*  - Match key with optional whitespace
-        # (?:                       - Non-capturing group for alternatives:
-        #   ["\']([^"\']*)["\']     -   Group 1: quoted value (single or double quotes)
-        #   |                       -   OR
-        #   ([^\s#\n]+)             -   Group 2: unquoted value (until whitespace/comment/newline)
+        # ^\s*                                    - Start of line with optional whitespace
+        # (?:["\']?builder_binary["\']?|builder_binary) - Key: quoted or unquoted "builder_binary"
+        # \s*:\s*                                 - Colon with optional whitespace
+        # (?:                                     - Non-capturing group for value alternatives:
+        #   ["\']([^"\']*)["\']                   -   Group 1: quoted value (single or double quotes)
+        #   |                                     -   OR
+        #   ([^\s#\n]+)                           -   Group 2: unquoted value (until whitespace/comment/newline)
         # )
-        pattern = r'^\s*builder_binary\s*:\s*(?:["\']([^"\']*)["\']|([^\s#\n]+))'
+        pattern = r'^\s*(?:["\']builder_binary["\']|builder_binary)\s*:\s*(?:["\']([^"\']*)["\']|([^\s#\n]+))'
         match = re.search(pattern, content, re.MULTILINE)
 
         if not match:
