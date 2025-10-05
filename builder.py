@@ -58,8 +58,8 @@ class ProjectConfiguration:
         self.builder_url = builder_url.strip()
 
 
-class PathManager:
-    """Manages URL encoding and path construction for cache directories."""
+class PathBuilder:
+    """Handles all path-based operations for cache directories and URL encoding."""
 
     def __init__(self, executables_dir: Path):
         self.executables_dir = executables_dir
@@ -201,10 +201,10 @@ class TrustManager:
 class CacheManager:
     """Manages cache operations and directory management."""
 
-    def __init__(self, cache_dir: Path, executables_dir: Path, path_manager: PathManager):
+    def __init__(self, cache_dir: Path, executables_dir: Path, path_builder: PathBuilder):
         self.cache_dir = cache_dir
         self.executables_dir = executables_dir
-        self.path_manager = path_manager
+        self.path_builder = path_builder
 
     def ensure_cache_directories(self) -> None:
         """Create cache and config directories if they don't exist."""
@@ -213,12 +213,12 @@ class CacheManager:
 
     def is_builder_cached(self, url: str) -> bool:
         """Check if builder executable is already cached."""
-        builder_path = self.path_manager.get_builder_executable_path_for_url(url)
+        builder_path = self.path_builder.get_builder_executable_path_for_url(url)
         return builder_path.exists() and builder_path.is_file()
 
     def cache_builder_executable(self, source_path: Path, url: str) -> None:
         """Copy the builder executable to the cache."""
-        target_path = self.path_manager.get_builder_executable_path_for_url(url)
+        target_path = self.path_builder.get_builder_executable_path_for_url(url)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         print(f"Caching builder executable to: {target_path}")
@@ -303,9 +303,9 @@ class CacheManager:
 
         print(f"Removing cache for URL: {url}")
 
-        # Get paths using path manager
-        cache_dir = self.path_manager.get_builder_cache_dir(url)
-        builder_path = self.path_manager.get_builder_executable_path_for_url(url)
+        # Get paths using path builder
+        cache_dir = self.path_builder.get_builder_cache_dir(url)
+        builder_path = self.path_builder.get_builder_executable_path_for_url(url)
 
         if not cache_dir.exists():
             print(f"No cache entry found for: {url}")
@@ -694,9 +694,9 @@ class BuilderManager:
         # Initialize specialized components
         config_file = self.project_root / ProjectConfiguration.CONFIG_FILE_NAME
         self.configuration = ProjectConfiguration(config_file)
-        self.path_manager = PathManager(self.executables_dir)
+        self.path_builder = PathBuilder(self.executables_dir)
         self.trust_manager = TrustManager(self.config_dir)
-        self.cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
+        self.cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
         self.source_manager = SourceManager()
         self.build_manager = BuildManager()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
@@ -738,7 +738,7 @@ class BuilderManager:
 
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable for the current project."""
-        return self.path_manager.get_builder_executable_path_for_url(self.configuration.builder_url)
+        return self.path_builder.get_builder_executable_path_for_url(self.configuration.builder_url)
 
     def is_builder_cached(self) -> bool:
         """Check if builder executable is already cached."""

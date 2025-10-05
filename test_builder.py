@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 # Import the module we're testing
 from builder import (
-    BuilderManager, ProjectConfiguration, PathManager, TrustManager,
+    BuilderManager, ProjectConfiguration, PathBuilder, TrustManager,
     CacheManager, SourceManager, BuildManager, CommandProcessor
 )
 
@@ -64,8 +64,8 @@ class TestProjectConfiguration(unittest.TestCase):
         self.assertEqual(configuration.config_file, self.config_file)
 
 
-class TestPathManager(unittest.TestCase):
-    """Test cases for the PathManager class."""
+class TestPathBuilder(unittest.TestCase):
+    """Test cases for the PathBuilder class."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
@@ -80,40 +80,38 @@ class TestPathManager(unittest.TestCase):
 
     def test_caret_encode_url(self) -> None:
         """Test URL encoding using caret encoding."""
-        path_manager = PathManager(self.executables_dir)
+        path_builder = PathBuilder(self.executables_dir)
 
         # Test safe characters are unchanged
         safe_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"
-        self.assertEqual(path_manager.caret_encode_url(safe_chars), safe_chars)
-
-        # Test unsafe characters are encoded
+        self.assertEqual(path_builder.caret_encode_url(safe_chars), safe_chars)        # Test unsafe characters are encoded
         unsafe_chars = ['/', ':', '?', '#', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '=']
         for char in unsafe_chars:
-            result = path_manager.caret_encode_url(char)
+            result = path_builder.caret_encode_url(char)
             self.assertTrue(result.startswith('^'))
             self.assertNotEqual(result, char)
 
         # Test full URL encoding
         url = "https://github.com/user/repo.git?tag=v1.0"
-        encoded = path_manager.caret_encode_url(url)
+        encoded = path_builder.caret_encode_url(url)
         self.assertNotIn(':', encoded)
         self.assertNotIn('/', encoded)
         self.assertNotIn('?', encoded)
 
     def test_get_builder_cache_dir(self) -> None:
         """Test getting cache directory for a URL."""
-        path_manager = PathManager(self.executables_dir)
+        path_builder = PathBuilder(self.executables_dir)
         url = "https://github.com/test/repo.git"
-        cache_dir = path_manager.get_builder_cache_dir(url)
-        expected_dir = self.executables_dir / path_manager.caret_encode_url(url)
+        cache_dir = path_builder.get_builder_cache_dir(url)
+        expected_dir = self.executables_dir / path_builder.caret_encode_url(url)
         self.assertEqual(cache_dir, expected_dir)
 
     def test_get_builder_executable_path_for_url(self) -> None:
         """Test getting executable path for a URL."""
-        path_manager = PathManager(self.executables_dir)
+        path_builder = PathBuilder(self.executables_dir)
         url = "https://github.com/test/repo.git"
-        exe_path = path_manager.get_builder_executable_path_for_url(url)
-        expected_path = path_manager.get_builder_cache_dir(url) / "builder"
+        exe_path = path_builder.get_builder_executable_path_for_url(url)
+        expected_path = path_builder.get_builder_cache_dir(url) / "builder"
         self.assertEqual(exe_path, expected_path)
 
 
@@ -467,7 +465,7 @@ class TestCacheManager(unittest.TestCase):
         self.temp_path = Path(self.temp_dir)
         self.cache_dir = self.temp_path / "cache"
         self.executables_dir = self.temp_path / "executables"
-        self.path_manager = PathManager(self.executables_dir)
+        self.path_builder = PathBuilder(self.executables_dir)
 
     def tearDown(self) -> None:
         """Clean up after tests."""
@@ -476,7 +474,7 @@ class TestCacheManager(unittest.TestCase):
 
     def test_ensure_cache_directories(self) -> None:
         """Test cache directory creation."""
-        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
+        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
         cache_manager.ensure_cache_directories()
 
         self.assertTrue(self.cache_dir.exists())
@@ -484,14 +482,14 @@ class TestCacheManager(unittest.TestCase):
 
     def test_is_builder_cached(self) -> None:
         """Test checking if builder is cached."""
-        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
+        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
         url = "https://github.com/test/repo.git"
 
         # Initially not cached
         self.assertFalse(cache_manager.is_builder_cached(url))
 
         # Create cached executable
-        exe_path = self.path_manager.get_builder_executable_path_for_url(url)
+        exe_path = self.path_builder.get_builder_executable_path_for_url(url)
         exe_path.parent.mkdir(parents=True, exist_ok=True)
         exe_path.write_text("mock executable")
 
@@ -500,7 +498,7 @@ class TestCacheManager(unittest.TestCase):
 
     def test_cache_builder_executable(self) -> None:
         """Test caching builder executable."""
-        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_manager)
+        cache_manager = CacheManager(self.cache_dir, self.executables_dir, self.path_builder)
         url = "https://github.com/test/repo.git"
 
         # Create source executable
@@ -511,8 +509,6 @@ class TestCacheManager(unittest.TestCase):
 
         # Verify it was cached
         self.assertTrue(cache_manager.is_builder_cached(url))
-
-
 class TestBuilderManagerIntegration(unittest.TestCase):
     """Integration tests for BuilderManager with real component interactions."""
 
