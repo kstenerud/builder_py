@@ -129,7 +129,7 @@ class TestPathBuilder(unittest.TestCase):
 
         # Test file paths
         self.assertEqual(path_builder.get_config_dir() / "trusted_urls", self.home_dir / ".config" / "builder" / "trusted_urls")
-        self.assertEqual(path_builder.project_root / "builder.yaml", self.project_root / "builder.yaml")
+        self.assertEqual(path_builder.get_project_config_file(), self.project_root / "builder.yaml")
 
 
 class TestTrustManager(unittest.TestCase):

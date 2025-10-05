@@ -105,6 +105,10 @@ class PathBuilder:
         """Get the configuration directory."""
         return self.config_dir
 
+    def get_project_config_file(self) -> Path:
+        """Get the project configuration file path."""
+        return self.project_root / "builder.yaml"
+
     def get_builder_cache_dir(self, url: str) -> Path:
         """Get the cache directory for a specific builder URL."""
         encoded_url = self._caret_encode_url(url)
@@ -726,14 +730,8 @@ class BuilderManager:
 
     def __init__(self) -> None:
         """Initialize the builder manager with specialized components."""
-        # Setup directory structure and path management
-        self.home_dir = Path.home()
-        self.project_root = Path.cwd()
-        self.path_builder = PathBuilder(self.home_dir, self.project_root)
-
-        # Initialize specialized components
-        config_file = self.path_builder.project_root / "builder.yaml"
-        self.configuration = ProjectConfiguration(config_file)
+        self.path_builder = PathBuilder(Path.home(), Path.cwd())
+        self.configuration = ProjectConfiguration(self.path_builder.get_project_config_file())
         self.trust_manager = TrustManager(self.path_builder)
         self.cache_manager = CacheManager(self.path_builder)
         self.source_fetcher = SourceFetcher()
