@@ -468,6 +468,32 @@ class BuilderManager:
 
         return ''.join(result)
 
+    def _get_builder_cache_dir(self, url: str) -> Path:
+        """Get the cache directory for a specific builder URL.
+
+        Encapsulates the URL encoding and directory structure logic.
+
+        Args:
+            url: The builder URL
+
+        Returns:
+            Path to the cache directory for this URL
+        """
+        encoded_url = self._caret_encode_url(url)
+        return self.executables_dir / encoded_url
+
+    def _get_builder_executable_path_for_url(self, url: str) -> Path:
+        """Get the executable path for a specific builder URL.
+
+        Args:
+            url: The builder URL
+
+        Returns:
+            Path to the cached executable for this URL
+        """
+        cache_dir = self._get_builder_cache_dir(url)
+        return cache_dir / self.BUILDER_EXECUTABLE_NAME
+
     def _get_file_age(self, file_path: Path) -> datetime:
         """Get the age of a file, trying access time, then modified time, then created time.
 
@@ -495,11 +521,13 @@ class BuilderManager:
         return datetime.now()
 
     def get_builder_executable_path(self) -> Path:
-        """Get the path to the cached builder executable."""
-        # Get the builder URL and caret-encode it for use as directory name
+        """Get the path to the cached builder executable for the current project.
+
+        Returns:
+            Path to the cached executable for the current project's builder URL
+        """
         builder_url = self.load_project_config()
-        encoded_url = self._caret_encode_url(builder_url)
-        return self.executables_dir / encoded_url / "builder"
+        return self._get_builder_executable_path_for_url(builder_url)
 
     def is_builder_cached(self) -> bool:
         """Check if builder executable is already cached."""
@@ -702,7 +730,11 @@ class BuilderManager:
         return builder_executable
 
     def cache_builder_executable(self, source_path: Path) -> None:
-        """Copy the builder executable to the cache."""
+        """Copy the builder executable to the cache.
+
+        Args:
+            source_path: Path to the source executable to cache
+        """
         target_path = self.get_builder_executable_path()
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -813,9 +845,9 @@ class BuilderManager:
         else:
             print(f"Removing cache for specified URL: {url}")
 
-        # Encode URL to match cache directory name
-        encoded_url = self._caret_encode_url(url)
-        cache_dir = self.executables_dir / encoded_url
+        # Get paths using centralized path management
+        cache_dir = self._get_builder_cache_dir(url)
+        builder_path = self._get_builder_executable_path_for_url(url)
 
         if not cache_dir.exists():
             print(f"No cache entry found for: {url}")
@@ -825,7 +857,6 @@ class BuilderManager:
             print(f"Cache entry is not a directory: {cache_dir}")
             return 0
 
-        builder_path = cache_dir / "builder"
         if not builder_path.exists():
             print(f"No builder executable found in cache entry: {cache_dir}")
             return 0
