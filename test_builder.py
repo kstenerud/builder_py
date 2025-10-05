@@ -167,7 +167,7 @@ class TestTrustManager(unittest.TestCase):
     def test_load_trusted_urls_builtin_only(self) -> None:
         """Test loading trusted URLs with no file (builtin only)."""
         trust_manager = TrustManager(self.path_builder)
-        trusted_urls = trust_manager.load_trusted_urls()
+        trusted_urls = trust_manager.all_trusted_urls()
 
         # Should contain builtin trusted URLs
         self.assertIn("https://github.com/kstenerud/builder-test.git", trusted_urls)
@@ -190,7 +190,7 @@ class TestTrustManager(unittest.TestCase):
         self.assertTrue(result)
 
         # Verify it was added
-        trusted_urls = trust_manager.load_trusted_urls()
+        trusted_urls = trust_manager.all_trusted_urls()
         self.assertIn(new_url, trusted_urls)
 
     def test_add_trusted_url_duplicate(self) -> None:
@@ -214,7 +214,7 @@ class TestTrustManager(unittest.TestCase):
         self.assertTrue(result)
 
         # Verify it was removed
-        trusted_urls = trust_manager.load_trusted_urls()
+        trusted_urls = trust_manager.all_trusted_urls()
         self.assertNotIn(test_url, trusted_urls)
 
     def test_remove_trusted_url_builtin(self) -> None:

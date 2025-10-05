@@ -139,8 +139,8 @@ class TrustManager:
         parsed = urlparse(url)
         return parsed.netloc.lower()
 
-    def load_trusted_urls(self) -> list[str]:
-        """Load trusted URLs from configuration file."""
+    def all_trusted_urls(self) -> list[str]:
+        """Get all trusted URLs (builtin and user-added)."""
         trusted_urls = self.builtin_trusted_urls.copy()
 
         if self.trusted_urls_file.exists():
@@ -155,7 +155,7 @@ class TrustManager:
 
         return trusted_urls
 
-    def save_trusted_urls(self, urls: list[str]) -> None:
+    def _save_trusted_urls(self, urls: list[str]) -> None:
         """Save trusted URLs to configuration file."""
         self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
@@ -168,7 +168,7 @@ class TrustManager:
 
     def add_trusted_url(self, url: str) -> bool:
         """Add a URL to the trusted list."""
-        trusted_urls = self.load_trusted_urls()
+        trusted_urls = self.all_trusted_urls()
 
         if url in trusted_urls:
             return False
@@ -176,7 +176,7 @@ class TrustManager:
         # Only save user-added URLs (not built-in ones)
         user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls]
         user_urls.append(url)
-        self.save_trusted_urls(user_urls)
+        self._save_trusted_urls(user_urls)
         return True
 
     def remove_trusted_url(self, url: str) -> bool:
@@ -185,20 +185,20 @@ class TrustManager:
             print(f"Cannot remove built-in trusted URL: {url}", file=sys.stderr)
             return False
 
-        trusted_urls = self.load_trusted_urls()
+        trusted_urls = self.all_trusted_urls()
 
         if url not in trusted_urls:
             return False
 
         # Only save user-added URLs (not built-in ones)
         user_urls = [u for u in trusted_urls if u not in self.builtin_trusted_urls and u != url]
-        self.save_trusted_urls(user_urls)
+        self._save_trusted_urls(user_urls)
         return True
 
     def is_url_trusted(self, url: str) -> bool:
         """Check if a URL is trusted based on domain matching."""
         url_domain = self._extract_domain(url)
-        trusted_urls = self.load_trusted_urls()
+        trusted_urls = self.all_trusted_urls()
 
         for trusted_url in trusted_urls:
             trusted_domain = self._extract_domain(trusted_url)
@@ -211,7 +211,7 @@ class TrustManager:
         """Validate that a builder URL is trusted."""
         if not self.is_url_trusted(url):
             url_domain = self._extract_domain(url)
-            trusted_urls = self.load_trusted_urls()
+            trusted_urls = self.all_trusted_urls()
             trusted_domains = [self._extract_domain(u) for u in trusted_urls]
 
             print(f"Error: Untrusted URL domain '{url_domain}'", file=sys.stderr)
@@ -631,7 +631,7 @@ class CommandProcessor:
     def handle_trust_list_command(self) -> int:
         """Handle --trust-list command."""
         try:
-            trusted_urls = self.trust_manager.load_trusted_urls()
+            trusted_urls = self.trust_manager.all_trusted_urls()
             print("Trusted URLs:")
             for url in sorted(trusted_urls):
                 marker = " (built-in)" if url in self.trust_manager.builtin_trusted_urls else ""
