@@ -102,6 +102,143 @@ class BuilderManager:
         """
         print(f"Error: {message}", file=sys.stderr)
 
+    def _handle_trust_yes_command(self, args: list[str]) -> int:
+        """Handle --trust-yes command.
+
+        Args:
+            args: Command line arguments
+
+        Returns:
+            Exit code: 0 for success, 1 for error
+        """
+        if len(args) < 3:
+            self._print_error("--trust-yes requires a URL parameter")
+            return 1
+
+        url = args[2]
+        try:
+            if self.add_trusted_url(url):
+                print(f"Added trusted URL: {url}")
+            else:
+                print(f"URL already trusted: {url}")
+            return 0
+        except Exception as e:
+            self._print_error(f"adding trusted URL: {e}")
+            return 1
+
+    def _handle_trust_no_command(self, args: list[str]) -> int:
+        """Handle --trust-no command.
+
+        Args:
+            args: Command line arguments
+
+        Returns:
+            Exit code: 0 for success, 1 for error
+        """
+        if len(args) < 3:
+            self._print_error("--trust-no requires a URL parameter")
+            return 1
+
+        url = args[2]
+        try:
+            if self.remove_trusted_url(url):
+                print(f"Removed trusted URL: {url}")
+            else:
+                print(f"URL not found in trusted list or is built-in: {url}")
+            return 0
+        except Exception as e:
+            self._print_error(f"removing trusted URL: {e}")
+            return 1
+
+    def _handle_trust_list_command(self) -> int:
+        """Handle --trust-list command.
+
+        Returns:
+            Exit code: 0 for success, 1 for error
+        """
+        try:
+            trusted_urls = self.load_trusted_urls()
+            print("Trusted URLs:")
+            for url in sorted(trusted_urls):
+                marker = " (built-in)" if url in self.builtin_trusted_urls else ""
+                print(f"  {url}{marker}")
+            return 0
+        except Exception as e:
+            self._print_error(f"listing trusted URLs: {e}")
+            return 1
+
+    def _handle_cache_prune_older_command(self, args: list[str]) -> int:
+        """Handle --cache-prune-older-than command.
+
+        Args:
+            args: Command line arguments
+
+        Returns:
+            Exit code: 0 for success, 1 for error
+        """
+        if len(args) < 3:
+            self._print_error("--cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)")
+            return 1
+
+        time_spec = args[2]
+        try:
+            max_age = self._parse_time_spec(time_spec)
+            removed = self.prune_cache(max_age)
+            return 0
+        except ValueError as e:
+            self._print_error(str(e))
+            return 1
+        except Exception as e:
+            self._print_error(f"during cache pruning: {e}")
+            return 1
+
+    def _handle_cache_prune_builder_command(self, args: list[str]) -> int:
+        """Handle --cache-prune-builder command.
+
+        Args:
+            args: Command line arguments
+
+        Returns:
+            Exit code: 0 for success, 1 for error
+        """
+        url = args[2] if len(args) >= 3 else None
+        try:
+            removed = self.prune_builder_cache(url)
+            return 0
+        except Exception as e:
+            self._print_error(f"during builder cache pruning: {e}")
+            return 1
+
+    def _handle_cache_help_command(self) -> int:
+        """Handle --cache-help command.
+
+        Returns:
+            Exit code: 0 for success
+        """
+        print("Cache Management:")
+        print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
+        print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
+        print("                                   (uses project's builder_binary if no URL specified)")
+        print("")
+        print("Trust Management:")
+        print("  --trust-yes <url>                Add URL to trusted list")
+        print("  --trust-no <url>                 Remove URL from trusted list")
+        print("  --trust-list                     List all trusted URLs")
+        print("")
+        print("Time format: <positive_integer><unit>")
+        print("  s = seconds, m = minutes, h = hours, d = days")
+        print("")
+        print("Examples:")
+        print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
+        print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
+        print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
+        print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
+        print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
+        print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
+        print("  ./builder.py --trust-no https://example.com/repo.git   # Remove trusted URL")
+        print("  ./builder.py --trust-list                   # List trusted URLs")
+        return 0
+
     def _extract_archive(self, archive_path: Path, extract_dir: Path) -> None:
         """Extract an archive file to the specified directory.
 
@@ -744,127 +881,44 @@ def main() -> int:
     Returns:
         Exit code: 0 for success, 1 for error
     """
-    # Check for trust management flags first
-    if len(sys.argv) >= 2:
-        if sys.argv[1] == "--trust-yes":
-            if len(sys.argv) < 3:
-                print("Error: --trust-yes requires a URL parameter", file=sys.stderr)
-                return 1
+    if len(sys.argv) < 2:
+        # No arguments, pass to builder
+        try:
+            manager = BuilderManager()
+            return manager.run_builder([])
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
-            url = sys.argv[2]
-            try:
-                manager = BuilderManager()
-                if manager.add_trusted_url(url):
-                    print(f"Added trusted URL: {url}")
-                else:
-                    print(f"URL already trusted: {url}")
-                return 0
-            except Exception as e:
-                print(f"Error adding trusted URL: {e}", file=sys.stderr)
-                return 1
+    command = sys.argv[1]
+    manager = BuilderManager()
 
-        elif sys.argv[1] == "--trust-no":
-            if len(sys.argv) < 3:
-                print("Error: --trust-no requires a URL parameter", file=sys.stderr)
-                return 1
+    # Command dispatch table for better maintainability
+    command_handlers = {
+        "--trust-yes": manager._handle_trust_yes_command,
+        "--trust-no": manager._handle_trust_no_command,
+        "--trust-list": lambda args: manager._handle_trust_list_command(),
+        "--cache-prune-older-than": manager._handle_cache_prune_older_command,
+        "--cache-prune-builder": manager._handle_cache_prune_builder_command,
+        "--cache-help": lambda args: manager._handle_cache_help_command(),
+    }
 
-            url = sys.argv[2]
-            try:
-                manager = BuilderManager()
-                if manager.remove_trusted_url(url):
-                    print(f"Removed trusted URL: {url}")
-                else:
-                    print(f"URL not found in trusted list or is built-in: {url}")
-                return 0
-            except Exception as e:
-                print(f"Error removing trusted URL: {e}", file=sys.stderr)
-                return 1
+    # Handle special commands
+    if command in command_handlers:
+        return command_handlers[command](sys.argv)
 
-        elif sys.argv[1] == "--trust-list":
-            try:
-                manager = BuilderManager()
-                trusted_urls = manager.load_trusted_urls()
-                print("Trusted URLs:")
-                for url in sorted(trusted_urls):
-                    marker = " (built-in)" if url in manager.builtin_trusted_urls else ""
-                    print(f"  {url}{marker}")
-                return 0
-            except Exception as e:
-                print(f"Error listing trusted URLs: {e}", file=sys.stderr)
-                return 1
-
-    # Check for cache management flags
-    if len(sys.argv) >= 2:
-        if sys.argv[1] == "--cache-prune-older-than":
-            if len(sys.argv) < 3:
-                print("Error: --cache-prune-older-than requires a time specification (e.g., 5m, 2h, 30d)", file=sys.stderr)
-                return 1
-
-            time_spec = sys.argv[2]
-
-            try:
-                manager = BuilderManager()
-                max_age = manager._parse_time_spec(time_spec)
-                removed = manager.prune_cache(max_age)
-                return 0
-            except ValueError as e:
-                print(f"Error: {e}", file=sys.stderr)
-                return 1
-            except Exception as e:
-                print(f"Error during cache pruning: {e}", file=sys.stderr)
-                return 1
-
-        elif sys.argv[1] == "--cache-prune-builder":
-            # Get URL parameter if provided
-            url = None
-            if len(sys.argv) >= 3:
-                url = sys.argv[2]
-
-            try:
-                manager = BuilderManager()
-                removed = manager.prune_builder_cache(url)
-                return 0
-            except Exception as e:
-                print(f"Error during builder cache pruning: {e}", file=sys.stderr)
-                return 1
-
-        elif sys.argv[1] == "--cache-help":
-            print("Cache Management:")
-            print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
-            print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
-            print("                                   (uses project's builder_binary if no URL specified)")
-            print("")
-            print("Trust Management:")
-            print("  --trust-yes <url>                Add URL to trusted list")
-            print("  --trust-no <url>                 Remove URL from trusted list")
-            print("  --trust-list                     List all trusted URLs")
-            print("")
-            print("Time format: <positive_integer><unit>")
-            print("  s = seconds, m = minutes, h = hours, d = days")
-            print("")
-            print("Examples:")
-            print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
-            print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
-            print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
-            print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
-            print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
-            print("  ./builder.py --trust-yes https://example.com/repo.git  # Add trusted URL")
-            print("  ./builder.py --trust-no https://example.com/repo.git   # Remove trusted URL")
-            print("  ./builder.py --trust-list                   # List trusted URLs")
-            return 0
-
-    # Parse arguments - we'll pass everything to the builder executable
-    parser = argparse.ArgumentParser(
-        description="Builder script wrapper",
-        add_help=False  # Don't show help for this wrapper
-    )
-
-    # Capture all arguments to pass to the builder
-    args, unknown_args = parser.parse_known_args()
-    all_args = unknown_args if unknown_args else sys.argv[1:]
-
+    # Default: pass arguments to builder executable
     try:
-        manager = BuilderManager()
+        # Parse arguments - we'll pass everything to the builder executable
+        parser = argparse.ArgumentParser(
+            description="Builder script wrapper",
+            add_help=False  # Don't show help for this wrapper
+        )
+
+        # Capture all arguments to pass to the builder
+        args, unknown_args = parser.parse_known_args()
+        all_args = unknown_args if unknown_args else sys.argv[1:]
+
         return manager.run_builder(all_args)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
