@@ -106,8 +106,8 @@ class TestBuilderManager(unittest.TestCase):
         manager = BuilderManager()
         path = manager.get_builder_executable_path()
 
-        # The directory name should be the caret-encoded URL
-        encoded_url = "https^3A^2F^2Fexample^2Ecom^2Ftest^2Ezip"
+        # The directory name should be the caret-encoded URL (dots no longer encoded)
+        encoded_url = "https^3A^2F^2Fexample.com^2Ftest.zip"
         expected_path = self.temp_path / ".cache" / "builder" / "executables" / encoded_url / "builder"
         self.assertEqual(path, expected_path)
 
@@ -139,7 +139,8 @@ class TestBuilderManager(unittest.TestCase):
         manager = BuilderManager()
 
         # Test safe characters (should not be encoded)
-        safe_chars = 'abc123-_{}'
+        # Including '.' and '~' since their edge cases don't apply to URL encoding
+        safe_chars = 'abc123-_{}.~'
         self.assertEqual(manager._caret_encode_url(safe_chars), safe_chars)
 
         # Test characters that must be encoded
@@ -149,7 +150,6 @@ class TestBuilderManager(unittest.TestCase):
             (' ', '^20'),
             ('@', '^40'),
             ('#', '^23'),
-            ('.', '^2E'),
             ('^', '^5E'),
         ]
 
@@ -157,10 +157,10 @@ class TestBuilderManager(unittest.TestCase):
             result = manager._caret_encode_url(char)
             self.assertEqual(result, expected, f"Failed to encode '{char}'")
 
-        # Test a full URL
+        # Test a full URL (dots should not be encoded now)
         url = 'https://example.com/test.zip'
         encoded = manager._caret_encode_url(url)
-        expected_encoded = 'https^3A^2F^2Fexample^2Ecom^2Ftest^2Ezip'
+        expected_encoded = 'https^3A^2F^2Fexample.com^2Ftest.zip'
         self.assertEqual(encoded, expected_encoded)
 
     def test_find_rust_project_root(self) -> None:

@@ -76,7 +76,8 @@ class BuilderManager:
             code = ord(char)
 
             # Safe characters that don't need encoding
-            if (char.isalnum() or char in '-_`{}'):
+            # Including '.' and '~' since their edge cases don't apply to URL encoding
+            if (char.isalnum() or char in '-_`{}.~'):
                 result.append(char)
             else:
                 # Encode the character
