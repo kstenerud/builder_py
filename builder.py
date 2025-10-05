@@ -187,13 +187,6 @@ class TrustManager:
     def validate_builder_url_trust(self, url: str) -> None:
         """Validate that a builder URL is trusted."""
         if not self.is_url_trusted(url):
-            trusted_urls = self.all_trusted_urls()
-
-            print(f"Error: Untrusted URL '{url}'", file=sys.stderr)
-            print(f"Trusted URL prefixes:", file=sys.stderr)
-            for trusted_url in sorted(trusted_urls):
-                print(f"  {trusted_url}", file=sys.stderr)
-            print(f"Use --trust-yes {url} to add this URL to the trusted list", file=sys.stderr)
             raise ValueError(f"Untrusted URL: {url}")
 
 
@@ -654,7 +647,17 @@ class BuilderRunner:
 
     def _ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
-        self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
+        try:
+            self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
+        except ValueError as e:
+            trusted_urls = self.trust_manager.all_trusted_urls()
+            print(f"Error: Untrusted URL '{self.configuration.builder_url}'", file=sys.stderr)
+            print(f"Trusted URL prefixes:", file=sys.stderr)
+            for trusted_url in sorted(trusted_urls):
+                print(f"  {trusted_url}", file=sys.stderr)
+            print(f"Use --trust-yes {self.configuration.builder_url} to add this URL to the trusted list", file=sys.stderr)
+            raise
+
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
             print(f"Builder not cached, downloading from: {self.configuration.builder_url}")
             with tempfile.TemporaryDirectory() as temp_dir:
