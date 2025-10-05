@@ -533,7 +533,7 @@ class TestCacheManager(unittest.TestCase):
         cache_manager.cache_builder_executable(source_path, url)
         self.assertTrue(cache_manager.is_builder_cached(url))
 
-    def test_prune_cache_age_comparison(self) -> None:
+    def test_prune_older_than_or_equal_age_comparison(self) -> None:
         """Test cache pruning with various age comparisons including edge case for age 0."""
         from datetime import datetime, timedelta
         import shutil
@@ -560,7 +560,7 @@ class TestCacheManager(unittest.TestCase):
         time.sleep(0.01)
 
         # Test pruning with age 0 - should clear entire cache
-        removed_count = cache_manager.prune_cache(timedelta(seconds=0))
+        removed_count = cache_manager.prune_older_than_or_equal(timedelta(seconds=0))
         self.assertEqual(removed_count, 3, "Age 0 should remove all cache entries")
 
         # Verify all entries were removed
@@ -574,7 +574,7 @@ class TestCacheManager(unittest.TestCase):
             exe_path.write_text("mock executable")
 
         # Test pruning with very small age - should still remove entries due to <= comparison
-        removed_count = cache_manager.prune_cache(timedelta(microseconds=1))
+        removed_count = cache_manager.prune_older_than_or_equal(timedelta(microseconds=1))
         self.assertEqual(removed_count, 3, "Very small age should remove all entries due to <= comparison")
 
         # Verify all entries were removed

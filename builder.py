@@ -269,7 +269,7 @@ class CacheManager:
         # If all else fails, use current time (shouldn't happen)
         return datetime.now()
 
-    def prune_cache(self, max_age: timedelta) -> int:
+    def prune_older_than_or_equal(self, max_age: timedelta) -> int:
         """Remove cached builders older than or equal to the specified age."""
         executables_dir = self.path_builder.get_executables_dir()
         if not executables_dir.exists():
@@ -320,7 +320,7 @@ class CacheManager:
 
         return removed_count
 
-    def prune_builder_cache(self, url: str) -> int:
+    def prune_builder(self, url: str) -> int:
         """Remove cached builder for a specific URL."""
         executables_dir = self.path_builder.get_executables_dir()
         if not executables_dir.exists():
@@ -657,7 +657,7 @@ class CommandProcessor:
         time_spec = args[2]
         try:
             max_age = self._parse_time_spec(time_spec)
-            removed = self.cache_manager.prune_cache(max_age)
+            removed = self.cache_manager.prune_older_than_or_equal(max_age)
             return 0
         except ValueError as e:
             self._print_error(str(e))
@@ -676,7 +676,7 @@ class CommandProcessor:
             else:
                 print(f"Removing cache for specified URL: {url}")
 
-            removed = self.cache_manager.prune_builder_cache(url)
+            removed = self.cache_manager.prune_builder(url)
             return 0
         except Exception as e:
             self._print_error(f"during builder cache pruning: {e}")
