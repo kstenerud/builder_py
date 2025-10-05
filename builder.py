@@ -16,7 +16,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import time
 import urllib.request
 from urllib.parse import urlparse
 import zipfile
@@ -43,7 +42,7 @@ class ProjectConfiguration:
         with open(self.config_file, 'r') as f:
             content = f.read()
 
-        # Single regex to match builder_binary field with flexible quoting for both key and value
+        # Match builder_binary field in the YAML config file
         pattern = r'^\s*(?:["\']builder_binary["\']|builder_binary)\s*:\s*(?:["\']([^"\']*)["\']|([^\s#\n]+))'
         match = re.search(pattern, content, re.MULTILINE)
 
@@ -135,6 +134,18 @@ class TrustManager:
         parsed = urlparse(url)
         return parsed.netloc.lower()
 
+    def _save_trusted_urls(self, urls: list[str]) -> None:
+        """Save trusted URLs to configuration file."""
+        # Ensure config directory exists when we need to save
+        self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
+
+        with open(self.trusted_urls_file, 'w') as f:
+            f.write("# Trusted URLs for builder script\n")
+            f.write("# One URL per line\n")
+            for url in urls:
+                if url not in self.builtin_trusted_urls:
+                    f.write(f"{url}\n")
+
     def all_trusted_urls(self) -> list[str]:
         """Get all trusted URLs (builtin and user-added)."""
         trusted_urls = self.builtin_trusted_urls.copy()
@@ -150,18 +161,6 @@ class TrustManager:
                 print(f"Warning: Error reading trusted URLs file: {e}", file=sys.stderr)
 
         return trusted_urls
-
-    def _save_trusted_urls(self, urls: list[str]) -> None:
-        """Save trusted URLs to configuration file."""
-        # Ensure config directory exists when we need to save
-        self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
-
-        with open(self.trusted_urls_file, 'w') as f:
-            f.write("# Trusted URLs for builder script\n")
-            f.write("# One URL per line\n")
-            for url in urls:
-                if url not in self.builtin_trusted_urls:
-                    f.write(f"{url}\n")
 
     def add_trusted_url(self, url: str) -> bool:
         """Add a URL to the trusted list."""
