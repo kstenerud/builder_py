@@ -733,8 +733,6 @@ class BuilderManager:
         self.builder_builder = BuilderBuilder()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
-
-
     def load_project_config(self) -> str:
         """Get builder_binary URL from configuration."""
         return self.configuration.builder_url
@@ -763,32 +761,18 @@ class BuilderManager:
         """Handle --cache-help command."""
         return self.command_processor.handle_cache_help_command()
 
-
-
     def get_builder_executable_path(self) -> Path:
         """Get the path to the cached builder executable for the current project."""
         return self.path_builder.get_builder_executable_path_for_url(self.configuration.builder_url)
 
-
-
-
-
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
+        self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
-            # Validate that the URL is trusted before downloading
-            self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
-
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
-
-                # Download archive or clone Git repository
                 self.source_fetcher.download_or_clone_source(self.configuration.builder_url, temp_path)
-
-                # Build the Rust project (BuilderBuilder will find the project root)
                 builder_executable = self.builder_builder.build_rust_project(temp_path)
-
-                # Cache the executable
                 self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
 
     def run_builder(self, args: list[str]) -> int:
@@ -810,19 +794,6 @@ class BuilderManager:
         except Exception as e:
             print(f"Error running builder: {e}", file=sys.stderr)
             return 1
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 def main() -> int:
     """Main entry point for the builder script.
