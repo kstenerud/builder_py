@@ -593,6 +593,103 @@ class TestBuilderManager(unittest.TestCase):
         # Cache directory should still exist
         self.assertTrue(cache_dir.exists())
 
+    def test_prune_builder_cache_with_project_url(self) -> None:
+        """Test pruning cache for project's builder_binary URL."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create cache structure
+        manager.ensure_cache_directories()
+
+        # Create test project config
+        test_yaml_content = 'builder_binary: "https://github.com/test/project.git"\n'
+        config_file = self.temp_path / "builder.yaml"
+        config_file.write_text(test_yaml_content)
+
+        # Create cache entry for this URL
+        encoded_url = manager._caret_encode_url("https://github.com/test/project.git")
+        cache_dir = manager.executables_dir / encoded_url
+        cache_dir.mkdir(exist_ok=True)
+        builder_exe = cache_dir / "builder"
+        builder_exe.touch()
+
+        # Verify cache exists
+        self.assertTrue(cache_dir.exists())
+        self.assertTrue(builder_exe.exists())
+
+        # Prune cache for project URL (no parameter)
+        removed = manager.prune_builder_cache()
+
+        # Verify cache was removed
+        self.assertEqual(removed, 1)
+        self.assertFalse(cache_dir.exists())
+
+    def test_prune_builder_cache_with_specific_url(self) -> None:
+        """Test pruning cache for a specific URL parameter."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create cache structure
+        manager.ensure_cache_directories()
+
+        # Create cache entries for multiple URLs
+        urls = [
+            "https://github.com/test/project1.git",
+            "https://github.com/test/project2.git"
+        ]
+
+        cache_dirs = []
+        for url in urls:
+            encoded_url = manager._caret_encode_url(url)
+            cache_dir = manager.executables_dir / encoded_url
+            cache_dir.mkdir(exist_ok=True)
+            builder_exe = cache_dir / "builder"
+            builder_exe.touch()
+            cache_dirs.append(cache_dir)
+
+        # Verify both caches exist
+        for cache_dir in cache_dirs:
+            self.assertTrue(cache_dir.exists())
+
+        # Prune cache for specific URL
+        removed = manager.prune_builder_cache(urls[0])
+
+        # Verify only the specified cache was removed
+        self.assertEqual(removed, 1)
+        self.assertFalse(cache_dirs[0].exists())  # First URL cache removed
+        self.assertTrue(cache_dirs[1].exists())   # Second URL cache still exists
+
+    def test_prune_builder_cache_url_not_found(self) -> None:
+        """Test pruning cache when URL is not found."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # Create cache structure but no cache entries
+        manager.ensure_cache_directories()
+
+        # Try to prune non-existent URL
+        removed = manager.prune_builder_cache("https://github.com/nonexistent/repo.git")
+
+        # Should return 0 (no cache entries removed)
+        self.assertEqual(removed, 0)
+
+    def test_prune_builder_cache_no_project_config(self) -> None:
+        """Test pruning cache when no project config exists."""
+        with patch('builder.Path.cwd', return_value=self.temp_path), \
+             patch('builder.Path.home', return_value=self.temp_path):
+            manager = BuilderManager()
+
+        # No builder.yaml file exists
+
+        # Try to prune using project config (should fail gracefully)
+        removed = manager.prune_builder_cache()
+
+        # Should return 0 due to error loading config
+        self.assertEqual(removed, 0)
+
     def test_prune_cache_nonexistent_directory(self) -> None:
         """Test cache pruning when cache directory doesn't exist."""
         with patch('builder.Path.cwd', return_value=self.temp_path), \

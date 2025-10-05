@@ -468,6 +468,55 @@ class BuilderManager:
 
         return removed_count
 
+    def prune_builder_cache(self, url: Optional[str] = None) -> int:
+        """Remove cached builder for a specific URL.
+
+        Args:
+            url: URL to remove from cache. If None, uses project's builder_binary URL.
+
+        Returns:
+            Number of cache entries removed (0 or 1)
+        """
+        if not self.executables_dir.exists():
+            return 0
+
+        # Get URL to remove
+        if url is None:
+            try:
+                url = self.load_project_config()
+                print(f"Removing cache for project's builder_binary: {url}")
+            except Exception as e:
+                print(f"Error loading project configuration: {e}", file=sys.stderr)
+                return 0
+        else:
+            print(f"Removing cache for specified URL: {url}")
+
+        # Encode URL to match cache directory name
+        encoded_url = self._caret_encode_url(url)
+        cache_dir = self.executables_dir / encoded_url
+
+        if not cache_dir.exists():
+            print(f"No cache entry found for: {url}")
+            return 0
+
+        if not cache_dir.is_dir():
+            print(f"Cache entry is not a directory: {cache_dir}")
+            return 0
+
+        builder_path = cache_dir / "builder"
+        if not builder_path.exists():
+            print(f"No builder executable found in cache entry: {cache_dir}")
+            return 0
+
+        try:
+            print(f"Removing cache entry: {cache_dir.name}")
+            shutil.rmtree(cache_dir)
+            print(f"Successfully removed cache for: {url}")
+            return 1
+        except Exception as e:
+            print(f"Error removing cache entry: {e}", file=sys.stderr)
+            return 0
+
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
         self.ensure_cache_directories()
@@ -498,7 +547,7 @@ class BuilderManager:
 
 def main() -> int:
     """Main entry point for the builder script."""
-    # Check for cache pruning flag first
+    # Check for cache management flags first
     if len(sys.argv) >= 2:
         if sys.argv[1] == "--cache-prune-older-than":
             if len(sys.argv) < 3:
@@ -519,9 +568,25 @@ def main() -> int:
                 print(f"Error during cache pruning: {e}", file=sys.stderr)
                 return 1
 
+        elif sys.argv[1] == "--cache-prune-builder":
+            # Get URL parameter if provided
+            url = None
+            if len(sys.argv) >= 3:
+                url = sys.argv[2]
+
+            try:
+                manager = BuilderManager()
+                removed = manager.prune_builder_cache(url)
+                return 0
+            except Exception as e:
+                print(f"Error during builder cache pruning: {e}", file=sys.stderr)
+                return 1
+
         elif sys.argv[1] == "--cache-help":
             print("Cache Management:")
             print("  --cache-prune-older-than <time>  Remove cached builders older than specified time")
+            print("  --cache-prune-builder [url]      Remove cached builder for specific URL")
+            print("                                   (uses project's builder_binary if no URL specified)")
             print("")
             print("Time format: <positive_integer><unit>")
             print("  s = seconds, m = minutes, h = hours, d = days")
@@ -530,6 +595,8 @@ def main() -> int:
             print("  ./builder.py --cache-prune-older-than 5m   # Remove entries older than 5 minutes")
             print("  ./builder.py --cache-prune-older-than 2h   # Remove entries older than 2 hours")
             print("  ./builder.py --cache-prune-older-than 30d  # Remove entries older than 30 days")
+            print("  ./builder.py --cache-prune-builder         # Remove cache for project's builder_binary")
+            print("  ./builder.py --cache-prune-builder <url>   # Remove cache for specific URL")
             return 0
 
     # Parse arguments - we'll pass everything to the builder executable
