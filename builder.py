@@ -335,7 +335,6 @@ class SourceFetcher:
 
     def _download_and_extract_archive(self, url: str, extract_dir: Path) -> None:
         """Download an archive file and extract it to the specified directory."""
-        print(f"Downloading builder from: {url}")
 
         # Determine appropriate suffix for temporary file
         if url.endswith('.zip'):
@@ -364,7 +363,6 @@ class SourceFetcher:
         if not source_path.is_file():
             raise ValueError(f"Path is not a file: {file_path}")
 
-        print(f"Extracting local archive: {file_path}")
         self._extract_archive(source_path, extract_dir)
 
     def _copy_file_directory(self, file_path: str, target_dir: Path) -> None:
@@ -377,18 +375,12 @@ class SourceFetcher:
         if not source_path.is_dir():
             raise ValueError(f"Path is not a directory: {file_path}")
 
-        print(f"Copying local directory: {file_path}")
-
         # Copy the entire directory tree
         shutil.copytree(source_path, target_dir, dirs_exist_ok=True)
 
     def _clone_and_checkout_git(self, url: str, clone_dir: Path) -> None:
         """Clone a Git repository and checkout the specified reference."""
         git_url, reference = self._parse_git_url(url)
-
-        print(f"Cloning Git repository from: {git_url}")
-        if reference:
-            print(f"Will checkout reference: {reference}")
 
         # Clone with minimal data transfer
         result = subprocess.run(
@@ -425,7 +417,6 @@ class SourceFetcher:
                     )
 
                     if result.returncode == 0:
-                        print(f"Checked out default branch: {branch}")
                         break
                 else:
                     raise RuntimeError("Neither 'main' nor 'master' branch exists in the repository")
@@ -490,8 +481,6 @@ class BuilderBuilder:
         rust_project_root = self._find_rust_project_root(source_dir)
         if not rust_project_root:
             raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
-
-        print(f"Building Rust project in: {rust_project_root}")
 
         # Run cargo build in release mode
         result = subprocess.run(
@@ -607,7 +596,15 @@ class CommandProcessor:
         time_spec = args[2]
         try:
             max_age = self._parse_time_spec(time_spec)
+            print(f"Pruning cache entries older than or equal to {max_age}...")
             removed_paths = self.cache_manager.prune_older_than_or_equal(max_age)
+
+            if removed_paths:
+                print(f"Removed {len(removed_paths)} cache entries:")
+                for path in removed_paths:
+                    print(f"  {path.name}")
+            else:
+                print("No cache entries found matching the age criteria")
             return 0
         except ValueError as e:
             self._print_error(str(e))
@@ -627,6 +624,13 @@ class CommandProcessor:
                 print(f"Removing cache for specified URL: {url}")
 
             removed_path = self.cache_manager.prune_builder(url)
+            if removed_path:
+                if removed_path.is_dir():
+                    print(f"Successfully removed cached builder directory: {removed_path.name}")
+                else:
+                    print(f"Successfully removed unexpected cache entry: {removed_path.name}")
+            else:
+                print(f"No cache entry found for URL: {url}")
             return 0
         except Exception as e:
             self._print_error(f"during builder cache pruning: {e}")
@@ -691,11 +695,15 @@ class BuilderRunner:
         """Ensure the builder executable is available, downloading if necessary."""
         self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
+            print(f"Builder not cached, downloading from: {self.configuration.builder_url}")
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
+                print("Fetching source code...")
                 self.source_fetcher.clone_source(self.configuration.builder_url, temp_path)
+                print("Building builder executable...")
                 builder_executable = self.builder_builder.build(temp_path)
                 self.cache_manager.cache_builder(builder_executable, self.configuration.builder_url)
+                print("Builder cached successfully")
 
     def run(self, args: list[str]) -> int:
         """Run the builder executable with the given arguments."""
