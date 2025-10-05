@@ -569,7 +569,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
-        url = manager.load_project_config()
+        url = manager.configuration.builder_url
         self.assertEqual(url, 'https://github.com/kstenerud/builder-test.git')
 
     def test_get_builder_executable_path(self) -> None:
@@ -577,7 +577,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         with patch('builder.Path.cwd', return_value=self.temp_path):
             manager = BuilderManager()
 
-        path = manager.get_builder_executable_path()
+        path = manager.path_builder.get_builder_executable_path_for_url(manager.configuration.builder_url)
         self.assertTrue(str(path).endswith('builder'))
 
     def test_is_builder_cached(self) -> None:
@@ -586,7 +586,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
             manager = BuilderManager()
 
         # Remove any existing cached executable to ensure clean state
-        exe_path = manager.get_builder_executable_path()
+        exe_path = manager.path_builder.get_builder_executable_path_for_url(manager.configuration.builder_url)
         if exe_path.exists():
             exe_path.unlink()
 

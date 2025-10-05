@@ -748,14 +748,6 @@ class BuilderManager:
         self.builder_builder = BuilderBuilder()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
-    def load_project_config(self) -> str:
-        """Get builder_binary URL from configuration."""
-        return self.configuration.builder_url
-
-    def get_builder_executable_path(self) -> Path:
-        """Get the path to the cached builder executable for the current project."""
-        return self.path_builder.get_builder_executable_path_for_url(self.configuration.builder_url)
-
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
         self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
@@ -770,7 +762,7 @@ class BuilderManager:
         """Run the builder executable with the given arguments."""
         self.ensure_builder_available()
 
-        builder_path = self.get_builder_executable_path()
+        builder_path = self.path_builder.get_builder_executable_path_for_url(self.configuration.builder_url)
 
         # Execute the builder with the provided arguments
         try:
