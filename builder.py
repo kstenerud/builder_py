@@ -263,11 +263,18 @@ class CacheManager:
 
         print(f"Pruning cache entries older than or equal to {age}...")
 
-        for cache_dir in executables_dir.iterdir():
-            if not cache_dir.is_dir():
+        for cache_entry in executables_dir.iterdir():
+            if not cache_entry.is_dir():
+                # Remove any non-directory entries as they shouldn't be there
+                try:
+                    print(f"Removing unexpected non-directory entry: {cache_entry.name}")
+                    cache_entry.unlink()
+                    removed_count += 1
+                except Exception as e:
+                    print(f"Warning: Could not remove non-directory entry {cache_entry.name}: {e}")
                 continue
 
-            builder_path = cache_dir / "builder"
+            builder_path = cache_entry / "builder"
             if not builder_path.exists():
                 continue
 
@@ -275,8 +282,8 @@ class CacheManager:
                 file_age = self._get_file_age(builder_path)
 
                 if file_age <= cutoff_time:
-                    print(f"Removing old cache entry: {cache_dir.name}")
-                    shutil.rmtree(cache_dir)
+                    print(f"Removing old cache entry: {cache_entry.name}")
+                    shutil.rmtree(cache_entry)
                     removed_count += 1
                 else:
                     # Calculate human-readable age
@@ -289,10 +296,10 @@ class CacheManager:
                         age_str = f"{age_delta.seconds // 60}m"
                     else:
                         age_str = f"{age_delta.seconds}s"
-                    print(f"Keeping cache entry (age: {age_str}): {cache_dir.name}")
+                    print(f"Keeping cache entry (age: {age_str}): {cache_entry.name}")
 
             except Exception as e:
-                print(f"Warning: Could not check age of {cache_dir.name}: {e}")
+                print(f"Warning: Could not check age of {cache_entry.name}: {e}")
                 continue
 
         if removed_count > 0:
@@ -307,22 +314,18 @@ class CacheManager:
             return 0
 
         cache_dir = self.path_builder.get_builder_cache_dir(url)
-        builder_path = self.path_builder.get_builder_executable_path_for_url(url)
 
         if not cache_dir.exists():
             return 0
 
-        if not cache_dir.is_dir():
-            print(f"Cache entry is not a directory: {cache_dir}")
-            return 0
-
-        if not builder_path.exists():
-            print(f"No builder executable found in cache entry: {cache_dir}")
-            return 0
-
         try:
-            shutil.rmtree(cache_dir)
-            print(f"Removed cached builder for: {url}")
+            if cache_dir.is_dir():
+                shutil.rmtree(cache_dir)
+                print(f"Removed cached builder for: {url}")
+            else:
+                # Remove unexpected non-directory entry
+                cache_dir.unlink()
+                print(f"Removed unexpected non-directory cache entry for: {url}")
             return 1
         except Exception as e:
             print(f"Error removing cache entry: {e}", file=sys.stderr)
