@@ -296,16 +296,11 @@ class CacheManager:
         if not cache_dir.exists():
             return None
 
-        try:
-            if cache_dir.is_dir():
-                shutil.rmtree(cache_dir)
-            else:
-                # Remove unexpected non-directory entry
-                cache_dir.unlink()
-            return cache_dir
-        except Exception as e:
-            print(f"Error removing cache entry: {e}", file=sys.stderr)
-            return None
+        if cache_dir.is_dir():
+            shutil.rmtree(cache_dir)
+        else:
+            cache_dir.unlink()
+        return cache_dir
 
 
 class SourceFetcher:
@@ -553,7 +548,6 @@ class CommandProcessor:
         url = args[2]
         try:
             self.trust_manager.add_trusted_url(url)
-            print(f"Added trusted URL: {url}")
         except Exception as e:
             self._print_error(f"adding trusted URL: {e}")
 
@@ -566,7 +560,6 @@ class CommandProcessor:
         url = args[2]
         try:
             self.trust_manager.remove_trusted_url(url)
-            print(f"Removed trusted URL: {url}")
         except Exception as e:
             self._print_error(f"removing trusted URL: {e}")
 
@@ -574,10 +567,9 @@ class CommandProcessor:
         """Handle --trust-list command."""
         try:
             trusted_urls = self.trust_manager.all_trusted_urls()
-            print("Trusted URLs:")
             for url in sorted(trusted_urls):
                 marker = " (built-in)" if url in self.trust_manager.builtin_trusted_urls else ""
-                print(f"  {url}{marker}")
+                print(f"{url}{marker}")
         except Exception as e:
             self._print_error(f"listing trusted URLs: {e}")
 
@@ -590,15 +582,11 @@ class CommandProcessor:
         time_spec = args[2]
         try:
             max_age = self._parse_time_spec(time_spec)
-            print(f"Pruning cache entries older than or equal to {max_age}...")
             removed_paths = self.cache_manager.prune_older_than_or_equal(max_age)
 
             if removed_paths:
-                print(f"Removed {len(removed_paths)} cache entries:")
                 for path in removed_paths:
-                    print(f"  {path.name}")
-            else:
-                print("No cache entries found matching the age criteria")
+                    print(f"Removed {path.name}")
         except ValueError as e:
             self._print_error(str(e))
         except Exception as e:
@@ -610,18 +598,10 @@ class CommandProcessor:
         try:
             if url is None:
                 url = self.configuration.builder_url
-                print(f"Removing cache for project's builder_binary: {url}")
-            else:
-                print(f"Removing cache for specified URL: {url}")
 
             removed_path = self.cache_manager.prune_builder(url)
             if removed_path:
-                if removed_path.is_dir():
-                    print(f"Successfully removed cached builder directory: {removed_path.name}")
-                else:
-                    print(f"Successfully removed unexpected cache entry: {removed_path.name}")
-            else:
-                print(f"No cache entry found for URL: {url}")
+                print(f"Removed {removed_path.name}")
         except Exception as e:
             self._print_error(f"during builder cache pruning: {e}")
 
