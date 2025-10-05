@@ -26,7 +26,13 @@ from typing import Optional, Tuple
 
 
 class BuilderManager:
-    """Manages builder executable caching and execution."""
+    """Manages builder executable operations with security and configuration."""
+
+    # File and configuration constants
+    BUILDER_EXECUTABLE_NAME = "builder"
+    CONFIG_FILE_NAME = "builder.yaml"
+    SUPPORTED_ARCHIVE_FORMATS = ".zip, .tar.gz, .tgz"
+    TRUSTED_URLS_FILE = "trusted_urls"
 
     def __init__(self) -> None:
         """Initialize the builder manager."""
@@ -34,9 +40,9 @@ class BuilderManager:
         self.cache_dir = self.home_dir / ".cache" / "builder"
         self.executables_dir = self.cache_dir / "executables"
         self.config_dir = self.home_dir / ".config" / "builder"
-        self.trusted_urls_file = self.config_dir / "trusted_urls"
+        self.trusted_urls_file = self.config_dir / self.TRUSTED_URLS_FILE
         self.project_root = Path.cwd()
-        self.config_file = self.project_root / "builder.yaml"
+        self.config_file = self.project_root / self.CONFIG_FILE_NAME
 
         # Built-in trusted URLs (for testing and default behavior)
         self.builtin_trusted_urls = [
@@ -79,6 +85,22 @@ class BuilderManager:
             raise ValueError("Invalid configuration: 'builder_binary' value is empty")
 
         return builder_url.strip()
+
+    def _get_supported_archive_formats(self) -> str:
+        """Get a formatted string of supported archive formats for error messages.
+
+        Returns:
+            Human-readable string listing all supported archive formats
+        """
+        return self.SUPPORTED_ARCHIVE_FORMATS
+
+    def _print_error(self, message: str) -> None:
+        """Print error message to stderr with consistent formatting.
+
+        Args:
+            message: Error message to display
+        """
+        print(f"Error: {message}", file=sys.stderr)
 
     def _extract_domain(self, url: str) -> str:
         """Extract domain from URL for trust validation.
@@ -376,7 +398,7 @@ class BuilderManager:
             with tarfile.open(source_path, 'r:gz') as tar_ref:
                 tar_ref.extractall(extract_dir)
         else:
-            raise RuntimeError(f"Unsupported local archive format: {file_path}. Supported formats: .zip, .tar.gz, .tgz")
+            raise RuntimeError(f"Unsupported local archive format: {file_path}. Supported formats: {self._get_supported_archive_formats()}")
 
     def copy_file_directory(self, file_path: str, target_dir: Path) -> None:
         """Copy a local directory to the target location."""
@@ -451,7 +473,7 @@ class BuilderManager:
         elif url.endswith('.tar.gz') or url.endswith('.tgz'):
             self.download_and_extract_tar(url, extract_dir)
         else:
-            raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: .zip, .tar.gz, .tgz")
+            raise RuntimeError(f"Unsupported archive format for URL: {url}. Supported formats: {self._get_supported_archive_formats()}")
 
     def download_or_clone_source(self, url: str, target_dir: Path) -> None:
         """Download archive, clone Git repository, or copy local files based on URL format."""
@@ -484,7 +506,7 @@ class BuilderManager:
         elif source_path.is_dir():
             self.copy_file_directory(file_path, target_dir)
         else:
-            raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive (.zip, .tar.gz, .tgz)")
+            raise ValueError(f"Unsupported file type or format: {file_path}. Expected directory or archive ({self._get_supported_archive_formats()})")
 
     def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
@@ -689,7 +711,14 @@ class BuilderManager:
 
 
 def main() -> int:
-    """Main entry point for the builder script."""
+    """Main entry point for the builder script.
+
+    Handles command-line arguments and delegates to appropriate BuilderManager methods.
+    Supports trust management, cache operations, and project building.
+
+    Returns:
+        Exit code: 0 for success, 1 for error
+    """
     # Check for trust management flags first
     if len(sys.argv) >= 2:
         if sys.argv[1] == "--trust-yes":
