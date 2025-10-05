@@ -34,7 +34,7 @@ The intended use is for a copy of `builder.py` to be checked in at the root of a
 ### Core Components
 
 ```
-BuilderManager (Orchestrator)
+BuilderRunner (Orchestrator)
 ├── ProjectConfiguration (Config parsing)
 ├── PathBuilder (Path management)
 ├── TrustManager (Security validation)
@@ -46,10 +46,10 @@ BuilderManager (Orchestrator)
 
 ### Class Responsibilities
 
-#### **BuilderManager** - Main Orchestrator
+#### **BuilderRunner** - Main Orchestrator
 - Coordinates all components to fulfill user requests
 - Ensures builder availability through `_ensure_builder_available()`
-- Executes builder with `run_builder()`
+- Executes builder with `run()`
 - **Key Insight**: This is the only class that orchestrates the full workflow
 
 #### **ProjectConfiguration** - Configuration Management

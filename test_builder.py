@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 # Import the module we're testing
 from builder import (
-    BuilderManager, ProjectConfiguration, PathBuilder, TrustManager,
+    BuilderRunner, ProjectConfiguration, PathBuilder, TrustManager,
     CacheManager, SourceFetcher, BuilderBuilder, CommandProcessor
 )
 
@@ -582,8 +582,8 @@ class TestCacheManager(unittest.TestCase):
             self.assertFalse(cache_manager.is_builder_cached(url), f"Cache entry for {url} should be removed with small age")
 
 
-class TestBuilderManagerIntegration(unittest.TestCase):
-    """Integration tests for BuilderManager with real component interactions."""
+class TestBuilderRunnerIntegration(unittest.TestCase):
+    """Integration tests for BuilderRunner with real component interactions."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
@@ -603,7 +603,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
     def test_ensure_cache_directories(self) -> None:
         """Test that cache directories are created automatically."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderManager()
+            manager = BuilderRunner()
 
         # Directories should be created automatically during manager initialization
         self.assertTrue(manager.path_builder.get_cache_dir().exists())
@@ -612,7 +612,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
     def test_load_project_config(self) -> None:
         """Test loading project configuration."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderManager()
+            manager = BuilderRunner()
 
         url = manager.configuration.builder_url
         self.assertEqual(url, 'https://github.com/kstenerud/builder-test.git')
@@ -620,7 +620,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
     def test_get_builder_executable_path(self) -> None:
         """Test getting builder executable path."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderManager()
+            manager = BuilderRunner()
 
         path = manager.path_builder.get_builder_executable_path_for_url(manager.configuration.builder_url)
         self.assertTrue(str(path).endswith('builder'))
@@ -628,7 +628,7 @@ class TestBuilderManagerIntegration(unittest.TestCase):
     def test_is_builder_cached(self) -> None:
         """Test checking if builder is cached through CacheManager."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderManager()
+            manager = BuilderRunner()
 
         # Remove any existing cached executable to ensure clean state
         exe_path = manager.path_builder.get_builder_executable_path_for_url(manager.configuration.builder_url)
@@ -639,17 +639,17 @@ class TestBuilderManagerIntegration(unittest.TestCase):
         self.assertFalse(manager.cache_manager.is_builder_cached(manager.configuration.builder_url))
 
     @patch('builder.subprocess.run')
-    def test_run_builder_with_trust_validation(self, mock_run: Mock) -> None:
+    def test_run_with_trust_validation(self, mock_run: Mock) -> None:
         """Test running builder with trust validation through public interface."""
         with patch('builder.Path.cwd', return_value=self.temp_path):
-            manager = BuilderManager()
+            manager = BuilderRunner()
 
         # Should not raise since the URL is in builtin trusted URLs
         # This is an integration test, so we won't mock everything
         try:
             # This will fail due to network/build, but trust validation should pass
             # Testing through public interface instead of private ensure_builder_available
-            manager.run_builder(['--version'])
+            manager.run(['--version'])
         except Exception:
             # We expect this to fail at build stage, but trust validation should have passed
             pass

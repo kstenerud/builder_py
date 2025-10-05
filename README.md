@@ -237,9 +237,9 @@ mypy builder.py
 
 ## Architecture
 
-### BuilderManager Class
+### BuilderRunner Class
 
-The main `BuilderManager` class handles:
+The main `BuilderRunner` class handles:
 
 - **Cache Management**: Creating and managing cache directories
 - **Configuration Loading**: Reading `builder.yaml` files
@@ -253,7 +253,7 @@ The main `BuilderManager` class handles:
 - `_ensure_builder_available()`: Main orchestration method
 - `load_project_config()`: Loads project configuration
 - `download_and_build_builder()`: Downloads and builds from source
-- `run_builder()`: Executes the cached builder with arguments
+- `run()`: Executes the cached builder with arguments
 
 ## Test Data
 

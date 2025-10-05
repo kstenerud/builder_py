@@ -724,7 +724,7 @@ class CommandProcessor:
         return None
 
 
-class BuilderManager:
+class BuilderRunner:
     """Orchestrates builder executable operations using specialized components."""
 
     def __init__(self) -> None:
@@ -747,7 +747,7 @@ class BuilderManager:
                 builder_executable = self.builder_builder.build(temp_path)
                 self.cache_manager.cache_builder(builder_executable, self.configuration.builder_url)
 
-    def run_builder(self, args: list[str]) -> int:
+    def run(self, args: list[str]) -> int:
         """Run the builder executable with the given arguments."""
         self._ensure_builder_available()
 
@@ -779,14 +779,14 @@ def main() -> int:
     if len(sys.argv) < 2:
         # No arguments, pass to builder
         try:
-            manager = BuilderManager()
-            return manager.run_builder([])
+            manager = BuilderRunner()
+            return manager.run([])
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
     command = sys.argv[1]
-    manager = BuilderManager()
+    manager = BuilderRunner()
 
     # Try to handle special commands first
     result = manager.command_processor.dispatch_command(command, sys.argv)
@@ -805,7 +805,7 @@ def main() -> int:
         args, unknown_args = parser.parse_known_args()
         all_args = unknown_args if unknown_args else sys.argv[1:]
 
-        return manager.run_builder(all_args)
+        return manager.run(all_args)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
