@@ -525,8 +525,8 @@ class SourceManager:
                 self.download_and_extract_archive(url, target_dir)
 
 
-class BuildManager:
-    """Manages Rust project building operations."""
+class BuilderBuilder:
+    """Builds the builder executable from Rust project source."""
 
     def find_rust_project_root(self, search_dir: Path) -> Optional[Path]:
         """Find the root directory of a Rust project (containing Cargo.toml)."""
@@ -730,7 +730,7 @@ class BuilderManager:
         self.trust_manager = TrustManager(self.path_builder)
         self.cache_manager = CacheManager(self.path_builder)
         self.source_manager = SourceManager()
-        self.build_manager = BuildManager()
+        self.builder_builder = BuilderBuilder()
         self.command_processor = CommandProcessor(self.trust_manager, self.cache_manager, self.configuration)
 
 
@@ -781,8 +781,8 @@ class BuilderManager:
             # Download archive or clone Git repository
             self.source_manager.download_or_clone_source(self.configuration.builder_url, temp_path)
 
-            # Build the Rust project (BuildManager will find the project root)
-            builder_executable = self.build_manager.build_rust_project(temp_path)
+            # Build the Rust project (BuilderBuilder will find the project root)
+            builder_executable = self.builder_builder.build_rust_project(temp_path)
 
             # Cache the executable
             self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)

@@ -15,7 +15,7 @@ from unittest.mock import Mock, patch, MagicMock
 # Import the module we're testing
 from builder import (
     BuilderManager, ProjectConfiguration, PathBuilder, TrustManager,
-    CacheManager, SourceManager, BuildManager, CommandProcessor
+    CacheManager, SourceManager, BuilderBuilder, CommandProcessor
 )
 
 
@@ -401,8 +401,8 @@ class TestSourceManager(unittest.TestCase):
             mock_git.assert_called_once_with("https://github.com/user/repo.git", target_dir)
 
 
-class TestBuildManager(unittest.TestCase):
-    """Test cases for the BuildManager class."""
+class TestBuilderBuilder(unittest.TestCase):
+    """Test cases for the BuilderBuilder class."""
 
     def setUp(self) -> None:
         """Set up test fixtures."""
@@ -416,7 +416,7 @@ class TestBuildManager(unittest.TestCase):
 
     def test_find_rust_project_root(self) -> None:
         """Test finding Rust project root."""
-        build_manager = BuildManager()
+        build_manager = BuilderBuilder()
 
         # Create a Cargo.toml file
         cargo_file = self.temp_path / "Cargo.toml"
@@ -434,7 +434,7 @@ class TestBuildManager(unittest.TestCase):
     @patch('subprocess.run')
     def test_build_rust_project_success(self, mock_run: Mock) -> None:
         """Test successful Rust project build."""
-        build_manager = BuildManager()
+        build_manager = BuilderBuilder()
         mock_run.return_value.returncode = 0
 
         # Create source directory with Rust project
@@ -459,7 +459,7 @@ class TestBuildManager(unittest.TestCase):
     @patch('subprocess.run')
     def test_build_rust_project_failure(self, mock_run: Mock) -> None:
         """Test Rust project build failure."""
-        build_manager = BuildManager()
+        build_manager = BuilderBuilder()
         mock_run.return_value.returncode = 1
         mock_run.return_value.stderr = "Build failed"
 
