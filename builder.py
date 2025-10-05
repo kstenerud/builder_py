@@ -773,29 +773,23 @@ class BuilderManager:
 
 
 
-    def download_and_build_builder(self) -> None:
-        """Download, build, and cache the builder executable."""
-        # Validate that the URL is trusted before downloading
-        self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-
-            # Download archive or clone Git repository
-            self.source_fetcher.download_or_clone_source(self.configuration.builder_url, temp_path)
-
-            # Build the Rust project (BuilderBuilder will find the project root)
-            builder_executable = self.builder_builder.build_rust_project(temp_path)
-
-            # Cache the executable
-            self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
-
-
-
     def ensure_builder_available(self) -> None:
         """Ensure the builder executable is available, downloading if necessary."""
         if not self.cache_manager.is_builder_cached(self.configuration.builder_url):
-            self.download_and_build_builder()
+            # Validate that the URL is trusted before downloading
+            self.trust_manager.validate_builder_url_trust(self.configuration.builder_url)
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+
+                # Download archive or clone Git repository
+                self.source_fetcher.download_or_clone_source(self.configuration.builder_url, temp_path)
+
+                # Build the Rust project (BuilderBuilder will find the project root)
+                builder_executable = self.builder_builder.build_rust_project(temp_path)
+
+                # Cache the executable
+                self.cache_manager.cache_builder_executable(builder_executable, self.configuration.builder_url)
 
     def run_builder(self, args: list[str]) -> int:
         """Run the builder executable with the given arguments."""
