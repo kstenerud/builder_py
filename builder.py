@@ -62,7 +62,8 @@ class ProjectConfiguration:
         with open(self.config_file, 'r') as f:
             content = f.read()
 
-        # Match builder_binary field in the YAML config file
+        # Match builder_binary field in the YAML config file.
+        # We don't use a full YAML parser to avoid dependencies.
         pattern = r'^\s*(?:["\']builder_binary["\']|builder_binary)\s*:\s*(?:["\']([^"\']*)["\']|([^\s#\n]+))'
         match = re.search(pattern, content, re.MULTILINE)
 
@@ -152,7 +153,6 @@ class TrustManager:
 
     def _save_user_trusted_urls(self, urls: list[str]) -> None:
         """Save user-added trusted URLs to configuration file."""
-        # Ensure config directory exists when we need to save
         self.path_builder.get_config_dir().mkdir(parents=True, exist_ok=True)
 
         with open(self.trusted_urls_file, 'w') as f:
@@ -376,7 +376,6 @@ class SourceFetcher:
         if not source_path.is_dir():
             raise ValueError(f"Path is not a directory: {file_path}")
 
-        # Copy the entire directory tree
         shutil.copytree(source_path, target_dir, dirs_exist_ok=True)
 
     def _clone_and_checkout_git(self, url: str, clone_dir: Path) -> None:
@@ -439,7 +438,6 @@ class SourceFetcher:
         if not source_path.exists():
             raise FileNotFoundError(f"File or directory not found: {file_path}")
 
-        # Check if it's an archive file
         if source_path.is_file() and (file_path.endswith('.zip') or file_path.endswith('.tar.gz') or file_path.endswith('.tgz')):
             self._copy_and_extract_file_archive(file_path, target_dir)
         elif source_path.is_dir():
@@ -449,20 +447,16 @@ class SourceFetcher:
 
     def clone_source(self, url: str, target_dir: Path) -> None:
         """Download archive, clone Git repository, or copy local files based on URL format."""
-        # Check if it's a file URL
         if url.startswith('file://'):
             file_path = url[7:]  # Remove 'file://' prefix
             self._handle_file_url(file_path, target_dir)
-        # Check if it's a local file path (absolute or relative)
         elif url.startswith('/') or url.startswith('./') or url.startswith('../') or (len(url) > 1 and url[1] == ':'):  # Windows drive letters
             self._handle_file_url(url, target_dir)
-        # Check if it's a Git URL (ends with .git, potentially followed by #reference)
         else:
             git_url, _ = self._parse_git_url(url)
             if git_url.endswith('.git'):
                 self._clone_and_checkout_git(url, target_dir)
             else:
-                # It's a remote archive URL
                 self._download_and_extract_archive_by_extension(url, target_dir)
 
 
@@ -478,12 +472,10 @@ class BuilderBuilder:
 
     def build(self, source_dir: Path) -> Path:
         """Find Rust project root in source directory, build it, and return the executable path."""
-        # Find the Rust project root
         rust_project_root = self._find_rust_project_root(source_dir)
         if not rust_project_root:
             raise RuntimeError("No Rust project (Cargo.toml) found in downloaded source")
 
-        # Run cargo build in release mode
         result = subprocess.run(
             ['cargo', 'build', '--release'],
             cwd=rust_project_root,
@@ -494,7 +486,6 @@ class BuilderBuilder:
         if result.returncode != 0:
             raise RuntimeError(f"Failed to build Rust project:\n{result.stderr}")
 
-        # Find the built executable
         target_dir = rust_project_root / "target" / "release"
         builder_executable = target_dir / "builder"
 
@@ -532,7 +523,6 @@ class CommandProcessor:
         if amount <= 0:
             raise ValueError(f"Time amount must be positive, got: {amount}")
 
-        # Convert to timedelta based on unit
         if unit == 's':
             return timedelta(seconds=amount)
         elif unit == 'm':
