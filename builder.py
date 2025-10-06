@@ -39,25 +39,25 @@ class ProjectConfiguration:
 
     def _validate_builder_url(self, url: str) -> None:
         """Validate that the builder URL has a supported format."""
-        # Check for supported URL schemes and local paths
-        if url.startswith(('http://', 'https://', 'file://')):
+        # Check for URL schemes and local paths
+        if '://' in url:
             # Use urllib.parse to validate URL structure
             try:
                 parsed = urlparse(url)
+                if not parsed.scheme:
+                    raise ValueError(f"Invalid URL format: {url}")
                 if not parsed.netloc and not parsed.path:
                     raise ValueError(f"Invalid URL format: {url}")
-                # Only allow http, https, and file schemes
-                if parsed.scheme not in ('http', 'https', 'file'):
-                    raise ValueError(f"Unsupported URL scheme: {parsed.scheme}. Only http, https, and file are supported")
             except Exception as e:
-                if "Unsupported URL scheme" in str(e):
+                if "Invalid URL format" in str(e):
                     raise
                 raise ValueError(f"Invalid URL format: {url}")
         elif url.startswith(('/', './', '../')) or (len(url) > 1 and url[1] == ':'):
             # Local file paths are acceptable
             pass
         else:
-            raise ValueError(f"Unsupported URL format: {url}. Expected http://, https://, file://, or local path")
+            # Allow other formats - let the downstream builder handle validation
+            pass
 
     def _load_config(self) -> None:
         """Load and parse the configuration file."""
