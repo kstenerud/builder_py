@@ -29,6 +29,15 @@ The intended use is for a copy of `builder.py` to be checked in at the root of a
 - **Fail Fast**: Validate inputs early and provide clear error messages
 - **Idempotent Operations**: Repeated operations should be safe (e.g., caching, directory creation)
 
+### 🏗️ **Language and Environment**
+- **Checkin Capable**: This build wrapper will be added to the root directory of a project and checked into the source code manager, so it must be text-based
+- **Interpreted Language**: We can't know what architectures it will run on at build time, so the language must be interpreted
+- **Language Ubiquity**: The most widely supported text-based interpreted language with a big standard library is Python, so we use that
+- **Python 3**: All code must run on Python 3. Python 2 support is not a concern
+- **Type Hints**: All functions must use type hints to make static analysis easier
+- **Single File**: All non-test code must reside in a single file: `builder.py`
+- **No Dependencies**: Don't import anything that isn't in the standard library
+
 ## Architecture Overview
 
 ### Core Components
@@ -216,6 +225,11 @@ builder_binary: /path/to/local/directory
 - Update docstrings when changing method behavior
 - Update CLAUDE.md when gaining new architectural insights
 - Keep test descriptions accurate
+
+### ❌ **Outside Dependencies**
+- Outside dependencies complicate the build environment and create a risk of non-deterministic builds
+- Don't import depdendencies that need to be downloaded or would create a need for `requirements.txt` or a virtualenv
+- Find a way to do the required work using only the Python standrd library
 
 ## Key Insights Gained
 
