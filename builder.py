@@ -23,6 +23,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
 
+# Constants
+EXECUTABLE_PERMISSIONS = 0o755
+
 
 class ProjectConfiguration:
     """Project configuration loaded from builder.yaml."""
@@ -33,6 +36,28 @@ class ProjectConfiguration:
         """Load configuration from the specified builder.yaml file."""
         self.config_file = config_file_path
         self._load_config()
+
+    def _validate_builder_url(self, url: str) -> None:
+        """Validate that the builder URL has a supported format."""
+        # Check for supported URL schemes and local paths
+        if url.startswith(('http://', 'https://', 'file://')):
+            # Use urllib.parse to validate URL structure
+            try:
+                parsed = urlparse(url)
+                if not parsed.netloc and not parsed.path:
+                    raise ValueError(f"Invalid URL format: {url}")
+                # Only allow http, https, and file schemes
+                if parsed.scheme not in ('http', 'https', 'file'):
+                    raise ValueError(f"Unsupported URL scheme: {parsed.scheme}. Only http, https, and file are supported")
+            except Exception as e:
+                if "Unsupported URL scheme" in str(e):
+                    raise
+                raise ValueError(f"Invalid URL format: {url}")
+        elif url.startswith(('/', './', '../')) or (len(url) > 1 and url[1] == ':'):
+            # Local file paths are acceptable
+            pass
+        else:
+            raise ValueError(f"Unsupported URL format: {url}. Expected http://, https://, file://, or local path")
 
     def _load_config(self) -> None:
         """Load and parse the configuration file."""
@@ -55,6 +80,7 @@ class ProjectConfiguration:
             raise ValueError("Invalid configuration: 'builder_binary' value is empty")
 
         self.builder_url = builder_url.strip()
+        self._validate_builder_url(self.builder_url)
 
 
 class PathBuilder:
@@ -216,7 +242,7 @@ class CacheManager:
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         shutil.copy2(source_path, target_path)
-        target_path.chmod(0o755)
+        target_path.chmod(EXECUTABLE_PERMISSIONS)
 
     def _get_file_age(self, file_path: Path) -> datetime:
         """Get the age of a file, trying access time, then modified time, then created time."""
@@ -534,7 +560,7 @@ class CommandProcessor:
         try:
             self.trust_manager.add_trusted_url(url)
         except Exception as e:
-            self._print_error(f"adding trusted URL: {e}")
+            self._print_error(f"Failed to add trusted URL: {e}")
 
     def _handle_trust_no_command(self, args: list[str]) -> None:
         """Handle --trust-no command."""
@@ -546,7 +572,7 @@ class CommandProcessor:
         try:
             self.trust_manager.remove_trusted_url(url)
         except Exception as e:
-            self._print_error(f"removing trusted URL: {e}")
+            self._print_error(f"Failed to remove trusted URL: {e}")
 
     def _handle_trust_list_command(self) -> None:
         """Handle --trust-list command."""
@@ -556,7 +582,7 @@ class CommandProcessor:
                 marker = " (built-in)" if url in self.trust_manager.builtin_trusted_urls else ""
                 print(f"{url}{marker}")
         except Exception as e:
-            self._print_error(f"listing trusted URLs: {e}")
+            self._print_error(f"Failed to list trusted URLs: {e}")
 
     def _handle_cache_prune_older_command(self, args: list[str]) -> None:
         """Handle --cache-prune-older-than command (removes entries older than or equal to specified age)."""
@@ -575,7 +601,7 @@ class CommandProcessor:
         except ValueError as e:
             self._print_error(str(e))
         except Exception as e:
-            self._print_error(f"during cache pruning: {e}")
+            self._print_error(f"Failed during cache pruning: {e}")
 
     def _handle_cache_prune_builder_command(self, args: list[str]) -> None:
         """Handle --cache-prune-builder command."""
@@ -588,7 +614,7 @@ class CommandProcessor:
             if removed_path:
                 print(f"Removed {removed_path.name}")
         except Exception as e:
-            self._print_error(f"during builder cache pruning: {e}")
+            self._print_error(f"Failed during builder cache pruning: {e}")
 
     def _handle_cache_help_command(self) -> None:
         """Handle --cache-help command."""
